@@ -1,6 +1,6 @@
 
 
-```markdown
+
 # ♠️ Poker Between Friends (פוקר בין חברים)
 
 A modern, real-time Progressive Web App (PWA) for managing home poker games, tracking buy-ins/cash-outs live at the table, minimizing end-of-night peer-to-peer settlements, and analyzing long-term player statistics — built with zero-friction onboarding so friends can join straight from a WhatsApp invite link.
@@ -206,14 +206,4 @@ Players can install the web app directly onto their phone's home screen without 
 * **היסטוריה, מאזנים וסטטיסטיקות:** כל הנתונים נשמרים בענן לתמיד — כולל היסטוריית משחקים מלאה, רווח/הפסד מצטבר לכל שחקן, אחוזי הצלחה ומגמות לאורך זמן.
 * **מותאם ב-100% למובייל:** ממשק בעברית מלאה (RTL) עם אפשרות הוספה למסך הבית באייפון ובאנדרואיד לחוויית שימוש של אפליקציה רגילה.
 
-```
 
-### איך להעלות את זה לגיטהאב בבת אחת:
-1. ב-VS Code, לחץ על כפתור **`New File`** בתיקייה הראשית (`poker`) ותן לו את השם המדויק **`README.md`** (אם כבר קיים קובץ כזה, מחק את תוכנו והדבק את הכל).
-2. שמור (`Ctrl + S`) והרץ בטרמינל:
-   ```bash
-   git add README.md
-   git commit -m "Add comprehensive project README"
-   git push
-
-```
