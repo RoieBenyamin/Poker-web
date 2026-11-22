@@ -90,14 +90,21 @@ export function GroupsScreen() {
         )}
 
         {activeGroup && (
-          <Card id="create-group">
-            <div className="flex items-start gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="font-bold">הזמנה לקבוצת {activeGroup.name}</div>
+          <Card>
+            <div className="flex w-full flex-col items-stretch gap-3">
+              <div className="w-full min-w-0">
+                <div className="break-words font-bold">הזמנה לקבוצת {activeGroup.name}</div>
                 <div className="mt-1 text-sm text-slate-400">קוד הצטרפות</div>
-                <div className="num mt-1 text-2xl font-extrabold tracking-[0.3em] text-red-300" dir="ltr">{activeGroup.inviteCode}</div>
+                <div
+                  className="num mt-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-xl font-extrabold tracking-[0.2em] text-red-300 sm:text-2xl sm:tracking-[0.3em]"
+                  dir="ltr"
+                >
+                  {activeGroup.inviteCode}
+                </div>
               </div>
-              <Button variant="outline" size="sm" onClick={invite}><Copy size={15} />העתק קישור הזמנה לוואטסאפ</Button>
+              <Button variant="outline" block onClick={invite} className="whitespace-normal leading-tight">
+                <Copy size={17} /> העתק קישור הזמנה לוואטסאפ
+              </Button>
             </div>
             <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
               <span>כניסה ברירת מחדל: {formatMoney(activeGroup.defaultBuyIn)}</span>
