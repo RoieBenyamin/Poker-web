@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isMember(groupId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+    }
+
+    function isMemberAfter(groupId) {
+      return signedIn()
+        && existsAfter(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+    }
+
+    function isAdmin(groupId) {
+      return isMember(groupId)
+        && get(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    match /groups/{groupId} {
+      allow get, list: if isMember(groupId);
+      allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isAdmin(groupId)
+        && request.resource.data.createdBy == resource.data.createdBy;
+      allow delete: if false;
+
+      match /members/{memberId} {
+        allow get, list: if isMember(groupId);
+        allow create: if signedIn()
+          && memberId == request.auth.uid
+          && request.resource.data.userId == request.auth.uid
+          && (
+            (getAfter(/databases/$(database)/documents/groups/$(groupId)).data.createdBy == request.auth.uid
+              && request.resource.data.role == 'admin')
+            || (
+              request.resource.data.role == 'member'
+              && exists(/databases/$(database)/documents/invites/$(request.resource.data.invitationCode))
+              && get(/databases/$(database)/documents/invites/$(request.resource.data.invitationCode)).data.groupId == groupId
+            )
+          );
+        allow update, delete: if isAdmin(groupId);
+      }
+
+      match /players/{playerId} {
+        allow read: if isMember(groupId);
+        allow create: if isMemberAfter(groupId)
+          && (request.resource.data.userId == request.auth.uid || isAdmin(groupId));
+        allow update: if isAdmin(groupId) || (
+          isMember(groupId) && resource.data.userId == request.auth.uid
+        );
+        allow delete: if isAdmin(groupId);
+      }
+
+      match /sessions/{sessionId} {
+        allow read: if isMember(groupId);
+        allow create: if isAdmin(groupId) && request.resource.data.groupId == groupId;
+        allow update: if isAdmin(groupId) || (
+          isMember(groupId)
+          && request.resource.data.groupId == resource.data.groupId
+          && request.resource.data.phase == resource.data.phase
+          && request.resource.data.date == resource.data.date
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['players', 'buyIns', 'transfers'])
+        );
+        allow delete: if isAdmin(groupId);
+      }
+    }
+
+    match /invites/{inviteCode} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.inviteCode == inviteCode
+        && (
+          getAfter(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.createdBy == request.auth.uid
+          || isAdmin(request.resource.data.groupId)
+        );
+      allow update, delete: if isAdmin(resource.data.groupId);
+    }
+
+    match /users/{userId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /{path=**}/members/{memberId} {
+      allow list: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+  }
+}
