@@ -10,7 +10,7 @@ import { sessionStatus, sortByDateDesc } from '../lib/stats';
 
 /** "Active table" tab: shows the live game (or lets you choose / open one). */
 export function ActiveTableScreen() {
-  const { sessions } = useData();
+  const { sessions, isGroupAdmin } = useData();
   const [newOpen, setNewOpen] = useState(false);
   const live = sessions.filter((s) => s.phase === 'active').sort(sortByDateDesc);
   const pending = sessions.filter((s) => sessionStatus(s) === 'pending').sort(sortByDateDesc).slice(0, 3);
@@ -34,12 +34,16 @@ export function ActiveTableScreen() {
           <EmptyState
             icon={<Spade size={30} />}
             title="אין משחק פעיל"
-            text="פתחו משחק חדש ושתפו את הקישור עם החברים כדי שכל אחד יזין כניסות ויציאות מהטלפון."
+            text={isGroupAdmin
+              ? 'פתחו משחק חדש ושתפו את הקישור עם החברים כדי שכל אחד יזין כניסות ויציאות מהטלפון.'
+              : 'ממתינים למנהל הקבוצה שיפתח משחק חדש.'}
             action={
-              <Button size="lg" onClick={() => setNewOpen(true)}>
-                <Plus size={22} />
-                פתח משחק חדש
-              </Button>
+              isGroupAdmin && (
+                <Button size="lg" onClick={() => setNewOpen(true)}>
+                  <Plus size={22} />
+                  פתח משחק חדש
+                </Button>
+              )
             }
           />
         )}

@@ -8,6 +8,11 @@
   --color-slate-950: #09090b;
   --color-slate-900: #141417;
   --color-slate-800: #27272a;
+  --color-slate-700: #3f3f46;
+  --color-slate-500: #71717a;
+  --color-slate-400: #a1a1aa;
+  --color-slate-300: #d4d4d8;
+  --color-slate-100: #fafafa;
 }
 
 :root {

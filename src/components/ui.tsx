@@ -17,7 +17,7 @@ const variants: Record<Variant, string> = {
   secondary: 'bg-slate-800 text-slate-100 hover:bg-slate-700 active:bg-slate-900 border border-slate-700/60',
   outline: 'border border-red-500/50 text-red-300 hover:bg-red-500/10 active:bg-red-500/20',
   ghost: 'text-slate-300 hover:bg-slate-800/70 active:bg-slate-800',
-  danger: 'bg-rose-500/15 text-rose-300 border border-rose-500/40 hover:bg-rose-500/25 active:bg-rose-500/30',
+  danger: 'bg-red-500/15 text-red-300 border border-red-500/40 hover:bg-red-500/25 active:bg-red-500/30',
 };
 const sizes: Record<Size, string> = {
   sm: 'h-9 px-3 text-sm rounded-xl gap-1.5',

@@ -1,11 +1,9 @@
-import { useState } from 'react';
-import { Check, Plus } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { useData } from '../data/DataContext';
-import { useRun } from './Toast';
-import { Avatar, Button, cx, inputCls } from './ui';
+import { Avatar, cx } from './ui';
 
 /**
- * Multi-select list of friends + quick "new player" inline creation.
+ * Multi-select list of members of the selected group.
  * `exclude` hides players (e.g. already at the table).
  */
 export function PlayerPicker({
@@ -13,31 +11,19 @@ export function PlayerPicker({
   onToggle,
   exclude = [],
   allowedIds,
-  onCreated,
 }: {
   selected: string[];
   onToggle: (id: string) => void;
   exclude?: string[];
   allowedIds?: string[];
-  onCreated?: (id: string) => void;
 }) {
-  const { players, actions, meId } = useData();
-  const run = useRun();
-  const [name, setName] = useState('');
+  const { players, meId, activeGroup } = useData();
+  const memberIds = new Set(activeGroup?.members.map((member) => member.playerId) ?? []);
   const list = players
+    .filter((player) => memberIds.has(player.id))
     .filter((p) => !exclude.includes(p.id))
     .filter((p) => !allowedIds || allowedIds.includes(p.id))
     .sort((a, b) => (a.id === meId ? -1 : b.id === meId ? 1 : a.name.localeCompare(b.name, 'he')));
-
-  const exists = players.some((p) => p.name.trim() === name.trim());
-  const add = async () => {
-    if (!name.trim() || exists) return;
-    const p = await run(() => actions.createPlayer(name), `${name.trim()} נוסף לחברים`);
-    if (p) {
-      setName('');
-      (onCreated ?? onToggle)(p.id);
-    }
-  };
 
   return (
     <div>
@@ -73,26 +59,6 @@ export function PlayerPicker({
         {list.length === 0 && <p className="col-span-2 py-3 text-center text-sm text-slate-500">כל החברים כבר ברשימה</p>}
       </div>
 
-      <div className="mt-3 flex gap-2">
-        <input
-          className={inputCls}
-          placeholder="שחקן חדש – שם"
-          value={name}
-          maxLength={24}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              add();
-            }
-          }}
-        />
-        <Button variant="secondary" onClick={add} disabled={!name.trim() || exists} className="shrink-0">
-          <Plus size={20} />
-          הוסף
-        </Button>
-      </div>
-      {exists && name.trim() && <p className="mt-1 text-xs text-amber-400">השחקן כבר קיים ברשימה</p>}
     </div>
   );
 }

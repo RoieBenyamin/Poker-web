@@ -1,16 +1,14 @@
-import { initializeApp, type FirebaseOptions } from 'firebase/app';
+import { getApp, getApps, initializeApp, type FirebaseOptions } from 'firebase/app';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 import {
   collection,
   collectionGroup,
   deleteDoc,
   doc,
+  getFirestore,
   getDoc,
   getDocs,
-  initializeFirestore,
   onSnapshot,
-  persistentLocalCache,
-  persistentMultipleTabManager,
   query,
   runTransaction,
   setDoc,
@@ -18,23 +16,62 @@ import {
   writeBatch,
   type DocumentData,
 } from 'firebase/firestore';
-import type { AppData, Player, PokerGroup, Session } from '../types';
+import type { AppData, BuyIn, Player, PokerGroup, Session, SessionPlayer, Transfer } from '../types';
 import type { DataService } from './DataService';
+
+let servicePromise: Promise<DataService> | undefined;
 
 function groupData(group: PokerGroup): Omit<PokerGroup, 'members'> {
   const { members: _members, ...data } = group;
   return data;
 }
 
-export async function createFirebaseService(config: FirebaseOptions): Promise<DataService> {
-  const app = initializeApp(config);
+function encodeSession(session: Session): DocumentData {
+  const players = Object.fromEntries(session.players.map((player) => [player.playerId, player]));
+  const buyIns = session.buyIns.reduce<Record<string, BuyIn[]>>((byPlayer, buyIn) => {
+    (byPlayer[buyIn.playerId] ??= []).push(buyIn);
+    return byPlayer;
+  }, {});
+  const transfers = Object.fromEntries(session.transfers.map(({ id, from, to, amount }) => [
+    id,
+    { id, from, to, amount },
+  ]));
+  const paidByPlayer = session.transfers.reduce<Record<string, Record<string, { paid: boolean; paidAt?: string | null }>>>((byPlayer, transfer) => {
+    (byPlayer[transfer.from] ??= {})[transfer.id] = { paid: transfer.paid, paidAt: transfer.paidAt ?? null };
+    return byPlayer;
+  }, {});
+  return { ...session, players, buyIns, transfers, paidByPlayer };
+}
+
+function decodeSession(data: DocumentData, id: string): Session {
+  const players = Array.isArray(data.players)
+    ? data.players as SessionPlayer[]
+    : Object.values((data.players ?? {}) as Record<string, SessionPlayer>);
+  const buyIns = Array.isArray(data.buyIns)
+    ? data.buyIns as BuyIn[]
+    : Object.values((data.buyIns ?? {}) as Record<string, BuyIn[]>).flat();
+  const transferRecords = Array.isArray(data.transfers)
+    ? data.transfers as Transfer[]
+    : Object.values((data.transfers ?? {}) as Record<string, Transfer>);
+  const payments = (data.paidByPlayer ?? {}) as Record<string, Record<string, { paid: boolean; paidAt?: string | null }>>;
+  const transfers = transferRecords.map((transfer) => ({
+    ...transfer,
+    ...(payments[transfer.from]?.[transfer.id] ?? {}),
+  }));
+  return { ...data, id, players, buyIns, transfers } as Session;
+}
+
+export function createFirebaseService(config: FirebaseOptions): Promise<DataService> {
+  if (!servicePromise) servicePromise = initializeFirebaseService(config);
+  return servicePromise;
+}
+
+async function initializeFirebaseService(config: FirebaseOptions): Promise<DataService> {
+  const app = getApps().length > 0 ? getApp() : initializeApp(config);
   const auth = getAuth(app);
   const credential = await signInAnonymously(auth);
   const userId = credential.user.uid;
-  const db = initializeFirestore(app, {
-    ignoreUndefinedProperties: true,
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-  });
+  const db = getFirestore(app);
   const groupsCol = collection(db, 'groups');
   const usersCol = collection(db, 'users');
   const sessionGroupIds = new Map<string, string>();
@@ -53,8 +90,16 @@ export async function createFirebaseService(config: FirebaseOptions): Promise<Da
       let activeGroupIds = '';
       const emit = () => {
         const players = new Map<string, Player>();
-        if (ownPlayer) players.set(ownPlayer.id, ownPlayer);
-        playersByGroup.forEach((list) => list.forEach((player) => players.set(player.id, player)));
+        const mergePlayer = (player: Player) => {
+          const current = players.get(player.id);
+          players.set(player.id, {
+            ...current,
+            ...player,
+            groupIds: [...new Set([...(current?.groupIds ?? []), ...(player.groupIds ?? [])])],
+          });
+        };
+        if (ownPlayer) mergePlayer(ownPlayer);
+        playersByGroup.forEach((list) => list.forEach(mergePlayer));
         const sessions = [...sessionsByGroup.values()].flat();
         state.groups = [...groupDocs.entries()].flatMap(([id, group]) => {
           const members = groupMembers.get(id);
@@ -108,7 +153,7 @@ export async function createFirebaseService(config: FirebaseOptions): Promise<Da
               }, fail));
               groupUnsubs.push(onSnapshot(collection(groupRef, 'sessions'), (sessionSnap) => {
                 const list = sessionSnap.docs.map((sessionDoc) => {
-                  const session = { ...(sessionDoc.data() as Session), id: sessionDoc.id };
+                  const session = decodeSession(sessionDoc.data(), sessionDoc.id);
                   sessionGroupIds.set(session.id, id);
                   return session;
                 });
@@ -128,7 +173,20 @@ export async function createFirebaseService(config: FirebaseOptions): Promise<Da
       };
     },
     async upsertPlayer(player: Player) {
-      await setDoc(doc(usersCol, userId), { ...player, userId });
+      const profile = { ...player, userId };
+      await setDoc(doc(usersCol, userId), profile);
+      const memberships = await getDocs(query(collectionGroup(db, 'members'), where('userId', '==', userId)));
+      const batch = writeBatch(db);
+      memberships.docs.forEach((member) => {
+        const groupId = member.ref.parent.parent?.id;
+        if (groupId) {
+          batch.set(doc(db, 'groups', groupId, 'players', player.id), {
+            ...profile,
+            groupIds: [groupId],
+          });
+        }
+      });
+      if (!memberships.empty) await batch.commit();
     },
     async createGroup(group) {
       if ((await getDoc(doc(db, 'invites', group.inviteCode))).exists()) throw new Error('קוד ההזמנה כבר קיים. נסה שוב.');
@@ -189,7 +247,7 @@ export async function createFirebaseService(config: FirebaseOptions): Promise<Da
       await batch.commit();
     },
     async createSession(session) {
-      await setDoc(doc(db, 'groups', session.groupId, 'sessions', session.id), session);
+      await setDoc(doc(db, 'groups', session.groupId, 'sessions', session.id), encodeSession(session));
       sessionGroupIds.set(session.id, session.groupId);
     },
     async updateSession(id, mutate) {
@@ -199,7 +257,7 @@ export async function createFirebaseService(config: FirebaseOptions): Promise<Da
       await runTransaction(db, async (tx) => {
         const snap = await tx.get(ref);
         if (!snap.exists()) throw new Error('המשחק לא נמצא');
-        tx.set(ref, mutate({ ...(snap.data() as Session), id }));
+        tx.set(ref, encodeSession(mutate(decodeSession(snap.data(), id))));
       });
     },
     async deleteSession(id) {
@@ -211,7 +269,7 @@ export async function createFirebaseService(config: FirebaseOptions): Promise<Da
   };
 }
 
-async function ownProfile(db: ReturnType<typeof initializeFirestore>, userId: string): Promise<DocumentData> {
+async function ownProfile(db: ReturnType<typeof getFirestore>, userId: string): Promise<DocumentData> {
   const snap = await getDoc(doc(db, 'users', userId));
   if (!snap.exists()) throw new Error('הפרופיל לא נמצא. יש להתחבר מחדש.');
   return snap.data();

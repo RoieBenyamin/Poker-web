@@ -88,8 +88,8 @@ export function DashboardScreen({ playerId }: { playerId?: string }) {
               className={cx(
                 'relative overflow-hidden rounded-[2rem] border p-5 shadow-2xl',
                 summary.average >= 0
-                  ? 'border-emerald-500/30 bg-gradient-to-br from-emerald-800/50 via-slate-900 to-slate-900 shadow-emerald-900/20'
-                  : 'border-rose-500/30 bg-gradient-to-br from-rose-900/40 via-slate-900 to-slate-900 shadow-rose-900/20',
+                  ? 'border-green-500/30 bg-gradient-to-br from-green-900/50 via-slate-900 to-slate-900 shadow-green-900/20'
+                  : 'border-red-500/30 bg-gradient-to-br from-red-950/60 via-slate-900 to-slate-900 shadow-red-950/20',
               )}
             >
               <div className="flex items-center gap-3">
@@ -98,7 +98,7 @@ export function DashboardScreen({ playerId }: { playerId?: string }) {
                   <div className="text-sm text-slate-300">ממוצע רווח/הפסד</div>
                   <div className="text-xs text-slate-400">{rangeLabel}</div>
                 </div>
-                <div className={cx('mr-auto flex h-11 w-11 items-center justify-center rounded-2xl', summary.average >= 0 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300')}>
+                <div className={cx('mr-auto flex h-11 w-11 items-center justify-center rounded-2xl', summary.average >= 0 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-300')}>
                   {summary.average >= 0 ? <TrendingUp size={24} /> : <TrendingDown size={24} />}
                 </div>
               </div>
@@ -163,8 +163,8 @@ export function DashboardScreen({ playerId }: { playerId?: string }) {
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="font-semibold">מגמה</h3>
                 <div className="flex gap-3 text-[11px] text-slate-400">
-                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" />רווח</span>
-                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-rose-500" />הפסד</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-green-500" />רווח</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-red-500" />הפסד</span>
                   <span className="inline-flex items-center gap-1"><span className="h-0.5 w-3 bg-sky-400" />מצטבר</span>
                 </div>
               </div>
@@ -183,7 +183,7 @@ export function DashboardScreen({ playerId }: { playerId?: string }) {
                 <div className="text-xs text-slate-400">אחוז משחקים ברווח</div>
                 <div className="num mt-1 text-2xl font-semibold">{overall.winRate}%</div>
                 <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-800">
-                  <div className="h-full rounded-full bg-emerald-500" style={{ width: `${overall.winRate}%` }} />
+                  <div className="h-full rounded-full bg-green-500" style={{ width: `${overall.winRate}%` }} />
                 </div>
               </Card>
               <Card className="!p-3.5">
@@ -215,7 +215,7 @@ export function DashboardScreen({ playerId }: { playerId?: string }) {
               <ArrowDownLeft size={15} />
               {isMe ? 'חייבים לי' : `חייבים ל${player.name}`}
             </div>
-            <div className="num mt-1 text-right text-2xl font-bold text-emerald-400">{formatMoney(debts.owedToMeTotal)}</div>
+            <div className="num mt-1 text-right text-2xl font-bold text-green-500">{formatMoney(debts.owedToMeTotal)}</div>
             <div className="text-xs text-slate-500">{debts.owedToMe.length} העברות פתוחות</div>
           </Card>
           <Card className="!border-rose-500/25 !p-3.5">
@@ -223,7 +223,7 @@ export function DashboardScreen({ playerId }: { playerId?: string }) {
               <ArrowUpRight size={15} />
               {isMe ? 'אני חייב' : `${player.name} חייב`}
             </div>
-            <div className="num mt-1 text-right text-2xl font-bold text-rose-400">{formatMoney(debts.iOweTotal)}</div>
+            <div className="num mt-1 text-right text-2xl font-bold text-red-500">{formatMoney(debts.iOweTotal)}</div>
             <div className="text-xs text-slate-500">{debts.iOwe.length} העברות פתוחות</div>
           </Card>
         </div>

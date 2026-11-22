@@ -16,7 +16,7 @@ function ChartTooltip({ active, payload }: { active?: boolean; payload?: Array<{
   return (
     <div className="rounded-xl border border-slate-700 bg-slate-900/95 px-3 py-2 text-xs shadow-xl" dir="rtl">
       <div className="mb-1 font-semibold text-slate-200">{fmtDate(p.date)}</div>
-      <div className={p.net >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+      <div className={p.net >= 0 ? 'text-green-500' : 'text-red-500'}>
         במשחק: <span className="num font-bold">{ltr(formatSigned(p.net))}</span>
       </div>
       <div className="text-sky-300">
@@ -38,15 +38,15 @@ export function TrendChart({ games }: { games: GameResult[] }) {
     <div className="h-56 w-full" dir="ltr">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
-          <CartesianGrid stroke="#1e293b" vertical={false} />
+          <CartesianGrid stroke="#27272a" vertical={false} />
           {/* reversed: in RTL time flows right → left (oldest on the right) */}
-          <XAxis dataKey="label" reversed tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-          <YAxis orientation="right" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} width={44} tickFormatter={(v: number) => `${v}₪`} />
-          <ReferenceLine y={0} stroke="#475569" />
+          <XAxis dataKey="label" reversed tick={{ fill: '#a1a1aa', fontSize: 11 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+          <YAxis orientation="right" tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} width={44} tickFormatter={(v: number) => `${v}₪`} />
+          <ReferenceLine y={0} stroke="#3f3f46" />
           <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
           <Bar dataKey="net" radius={[6, 6, 6, 6]} maxBarSize={36}>
             {data.map((d, i) => (
-              <Cell key={i} fill={d.net >= 0 ? '#10b981' : '#f43f5e'} fillOpacity={0.9} />
+              <Cell key={i} fill={d.net >= 0 ? '#22c55e' : '#ef4444'} fillOpacity={0.9} />
             ))}
           </Bar>
           <Line type="monotone" dataKey="cumulative" stroke="#38bdf8" strokeWidth={2} dot={{ r: 2.5, fill: '#38bdf8' }} />

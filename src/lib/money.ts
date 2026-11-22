@@ -27,8 +27,8 @@ export function ltr(s: string): string {
 
 export function moneyTone(n: number): string {
   const r = roundMoney(n);
-  if (r > 0) return 'text-emerald-400';
-  if (r < 0) return 'text-rose-400';
+  if (r > 0) return 'text-green-500';
+  if (r < 0) return 'text-red-500';
   return 'text-slate-300';
 }
 

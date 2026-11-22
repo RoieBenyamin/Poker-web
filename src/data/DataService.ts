@@ -9,7 +9,7 @@ export type DataMode = 'firebase' | 'local';
 export interface DataService {
   readonly mode: DataMode;
   readonly userId?: string;
-  /** Subscribes to all data; the callback fires immediately and on every change. */
+  /** Subscribes to the accessible groups and their data; emits on every change. */
   subscribe(cb: (data: AppData) => void, onError?: (e: Error) => void): () => void;
   upsertPlayer(player: Player): Promise<void>;
   createGroup(group: PokerGroup): Promise<void>;

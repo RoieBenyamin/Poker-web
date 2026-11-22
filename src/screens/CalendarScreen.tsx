@@ -75,7 +75,7 @@ function MonthGrid({
 }
 
 export function CalendarScreen() {
-  const { sessions } = useData();
+  const { sessions, isGroupAdmin, activeGroup } = useData();
   const [view, setView] = useState<'calendar' | 'list'>('calendar');
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
@@ -115,7 +115,7 @@ export function CalendarScreen() {
     <>
       <Header
         title="יומן משחקים"
-        subtitle={`${sessions.length} משחקים`}
+        subtitle={`${activeGroup ? `${activeGroup.name} · ` : ''}${sessions.length} משחקים`}
         actions={
           <IconButton label="הגדרות" onClick={() => navigate('/settings')}>
             <Settings size={22} />
@@ -123,10 +123,12 @@ export function CalendarScreen() {
         }
       />
       <div className="px-4 pt-4">
-        <Button size="lg" block onClick={() => setNewOpen(true)}>
-          <Plus size={24} strokeWidth={2.6} />
-          פתח משחק חדש
-        </Button>
+        {isGroupAdmin && (
+          <Button size="lg" block onClick={() => setNewOpen(true)}>
+            <Plus size={24} strokeWidth={2.6} />
+            פתח משחק חדש
+          </Button>
+        )}
 
         {live.map((s) => {
           const t = sessionTotals(s);
@@ -206,9 +208,9 @@ export function CalendarScreen() {
           <EmptyState
             icon={view === 'calendar' ? <CalendarDays size={30} /> : <List size={30} />}
             title={selectedDay ? 'אין משחקים ביום הזה' : 'אין משחקים בתקופה הזו'}
-            text="זה הזמן לארגן ערב פוקר 🃏"
+            text={isGroupAdmin ? 'זה הזמן לארגן ערב פוקר 🃏' : 'ממתינים למנהל הקבוצה שיפתח משחק חדש.'}
             action={
-              selectedDay && (
+              isGroupAdmin && selectedDay && (
                 <Button variant="outline" onClick={() => setNewOpen(true)}>
                   <Plus size={18} />
                   פתח משחק

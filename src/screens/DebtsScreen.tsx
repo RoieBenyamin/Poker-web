@@ -50,7 +50,7 @@ export function DebtsScreen() {
             <Card className="mt-3 flex items-center justify-between">
               <div>
                 <div className="text-sm text-slate-400">סה״כ לא שולם</div>
-                <div className="num text-right text-3xl font-extrabold text-rose-400">{formatMoney(sumMoney(shown.map((d) => d.amount)))}</div>
+                <div className="num text-right text-3xl font-extrabold text-red-500">{formatMoney(sumMoney(shown.map((d) => d.amount)))}</div>
               </div>
               <div className="w-40">
                 <Segmented

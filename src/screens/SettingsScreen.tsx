@@ -9,7 +9,7 @@ import { navigate } from '../lib/router';
 import type { Player } from '../types';
 
 export function SettingsScreen() {
-  const { me, players, setMeId, actions, mode, sessions, isGroupAdmin } = useData();
+  const { me, players, setMeId, actions, mode, sessions } = useData();
   const run = useRun();
   const [switching, setSwitching] = useState(false);
   const [editing, setEditing] = useState<Player | null>(null);
@@ -62,13 +62,13 @@ export function SettingsScreen() {
             <button
               key={p.id}
               type="button"
-              onClick={() => (isGroupAdmin || p.id === me?.id) && setEditing(p)}
-              className={`flex w-full items-center gap-3 rounded-2xl p-2.5 text-right ${(isGroupAdmin || p.id === me?.id) ? 'active:bg-slate-800' : ''}`}
+              onClick={() => p.id === me?.id && setEditing(p)}
+              className={`flex w-full items-center gap-3 rounded-2xl p-2.5 text-right ${p.id === me?.id ? 'active:bg-slate-800' : ''}`}
             >
               <Avatar name={p.name} id={p.id} size="sm" />
               <span className="flex-1 font-medium">{p.name}</span>
               <span className="num text-sm text-slate-500">{p.phone ?? 'אין טלפון'}</span>
-              {(isGroupAdmin || p.id === me?.id) && <Pencil size={15} className="text-slate-600" />}
+              {p.id === me?.id && <Pencil size={15} className="text-slate-600" />}
             </button>
           ))}
         </Card>
@@ -84,7 +84,7 @@ export function SettingsScreen() {
               <div className="text-xs text-slate-400">
                 {mode === 'firebase'
                   ? 'כל החברים רואים עדכונים חיים מהטלפונים שלהם'
-                  : 'הנתונים נשמרים רק במכשיר הזה. הגדירו Firebase בקובץ ‎.env.local לסנכרון בין חברים.'}
+                  : 'הנתונים נשמרים רק במכשיר הזה. הגדירו Firebase בקובץ ‎.env לסנכרון בין חברים.'}
                 {mode === 'firebase' && <p className="mt-1 text-amber-300">החשבון האנונימי קשור למכשיר הזה; מעבר מכשיר דורש חשבון Firebase אחר.</p>}
               </div>
             </div>

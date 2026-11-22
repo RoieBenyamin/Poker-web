@@ -20,6 +20,10 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)).data.role == 'admin';
     }
 
+    function memberPlayerId(groupId) {
+      return get(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)).data.playerId;
+    }
+
     match /groups/{groupId} {
       allow get, list: if isMember(groupId);
       allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid;
@@ -62,10 +66,53 @@ service cloud.firestore {
           && request.resource.data.groupId == resource.data.groupId
           && request.resource.data.phase == resource.data.phase
           && request.resource.data.date == resource.data.date
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['players', 'buyIns', 'transfers'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['players', 'buyIns', 'paidByPlayer'])
+          && request.resource.data.players.diff(resource.data.players).affectedKeys().hasOnly([memberPlayerId(groupId)])
+          && request.resource.data.buyIns.diff(resource.data.buyIns).affectedKeys().hasOnly([memberPlayerId(groupId)])
+          && request.resource.data.paidByPlayer.diff(resource.data.paidByPlayer).affectedKeys().hasOnly([memberPlayerId(groupId)])
+          && selfPlayerChangeIsValid(groupId, resource.data, request.resource.data)
+          && selfBuyInChangeIsValid(groupId, resource.data, request.resource.data)
         );
         allow delete: if isAdmin(groupId);
       }
+    }
+
+    function selfPlayerChangeIsValid(groupId, oldSession, newSession) {
+      let playerId = memberPlayerId(groupId);
+      let oldPlayers = oldSession.players;
+      let newPlayers = newSession.players;
+      return (
+          !oldPlayers.keys().hasAny([playerId])
+          && !newPlayers.keys().hasAny([playerId])
+        )
+        || (
+          newPlayers.keys().hasAny([playerId])
+          && oldPlayers.keys().hasAny([playerId])
+          && newPlayers[playerId].playerId == oldPlayers[playerId].playerId
+          && newPlayers[playerId].joinedAt == oldPlayers[playerId].joinedAt
+          && newPlayers[playerId].diff(oldPlayers[playerId]).affectedKeys().hasOnly(['cashOut', 'cashOutAt'])
+        )
+        || (
+          newPlayers.keys().hasAny([playerId])
+          && !oldPlayers.keys().hasAny([playerId])
+          && newPlayers[playerId].playerId == playerId
+          && newPlayers[playerId].cashOut == null
+          && newPlayers[playerId].cashOutAt == null
+        );
+    }
+
+    function selfBuyInChangeIsValid(groupId, oldSession, newSession) {
+      let playerId = memberPlayerId(groupId);
+      let oldBuyIns = oldSession.buyIns.get(playerId, []);
+      let newBuyIns = newSession.buyIns.get(playerId, []);
+      return (newBuyIns.size() == oldBuyIns.size() && newBuyIns.hasAll(oldBuyIns))
+        || (
+          newBuyIns.size() == oldBuyIns.size() + 1
+          && newBuyIns.hasAll(oldBuyIns)
+          && newBuyIns[newBuyIns.size() - 1].playerId == playerId
+          && newBuyIns[newBuyIns.size() - 1].amount is number
+          && newBuyIns[newBuyIns.size() - 1].amount > 0
+        );
     }
 
     match /invites/{inviteCode} {

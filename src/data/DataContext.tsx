@@ -54,7 +54,8 @@ function buildActions(service: DataService | null, meId: string | null, group: P
       throw new Error('הפעולה זמינה למנהלי הקבוצה בלבד');
     }
   };
-  const isAdmin = () => Boolean(group?.members.some((m) => m.playerId === meId && m.role === 'admin'));
+  const isAdmin = () => Boolean(group?.members.some((m) => m.role === 'admin'
+    && (service?.mode === 'firebase' ? m.userId === service.userId : m.playerId === meId)));
   const positive = (amount: number) => {
     const v = roundMoney(amount);
     if (!Number.isFinite(v) || v < 0) throw new Error('סכום לא תקין');
@@ -126,7 +127,7 @@ function buildActions(service: DataService | null, meId: string | null, group: P
       await svc().updateGroup(group.id, (current) => ({ ...current, inviteCode }));
     },
     async createPlayer(name: string, phone?: string): Promise<Player> {
-      if (group && !isAdmin()) throw new Error('רק מנהל יכול להוסיף שחקן לקבוצה');
+      if (group) throw new Error('שחקנים מצטרפים לקבוצה באמצעות קוד הזמנה');
       const trimmed = name.trim();
       if (!trimmed) throw new Error('יש להזין שם');
       const player: Player = { id: uid('p_'), name: trimmed, createdAt: nowIso() };
@@ -135,7 +136,7 @@ function buildActions(service: DataService | null, meId: string | null, group: P
       return player;
     },
     async updatePlayer(player: Player) {
-      if (player.id !== meId && !isAdmin()) throw new Error('אפשר לערוך רק את הפרופיל שלך');
+      if (player.id !== meId) throw new Error('אפשר לערוך רק את הפרופיל שלך');
       await svc().upsertPlayer(player);
     },
     async createSession(input: NewSessionInput): Promise<string> {
@@ -321,7 +322,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       unsub?.();
     };
   }, []);
-
   const firebasePlayerId = service?.mode === 'firebase'
     ? data.players.find((p) => p.userId === service.userId)?.id
       ?? data.groups.flatMap((g) => g.members).find((m) => m.userId === service.userId)?.playerId
@@ -339,11 +339,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
     else localStorage.removeItem(GROUP_KEY);
     setGroupIdState(id);
   }, []);
+  useEffect(() => {
+    if (!ready) return;
+    if (!groupId && data.groups.length > 0) setGroupId(data.groups[0].id);
+    else if (groupId && !data.groups.some((group) => group.id === groupId)) {
+      setGroupId(data.groups[0]?.id ?? null);
+    }
+  }, [ready, data.groups, groupId, setGroupId]);
 
   const value = useMemo<DataContextValue>(() => {
     const activeGroup = data.groups.find((g) => g.id === groupId) ?? null;
     const memberIds = new Set(activeGroup?.members.map((m) => m.playerId) ?? []);
-    const scopedPlayers = activeGroup ? data.players.filter((p) => memberIds.has(p.id)) : data.players;
+    const scopedPlayers = activeGroup
+      ? data.players.filter((p) => memberIds.has(p.id) || p.groupIds?.includes(activeGroup.id))
+      : data.players;
     const scopedSessions = activeGroup ? data.sessions.filter((s) => s.groupId === activeGroup.id) : [];
     const playerMap = new Map(scopedPlayers.map((p) => [p.id, p]));
     const sessionMap = new Map(scopedSessions.map((s) => [s.id, s]));
