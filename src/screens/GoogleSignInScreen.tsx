@@ -1,11 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useData } from '../data/DataContext';
 import { Button, Card } from '../components/ui';
 
 export function GoogleSignInScreen() {
-  const { signInWithGoogle, error: serviceError } = useData();
+  const { signInWithGoogle, error: serviceError, authUser } = useData();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (authUser) {
+      setBusy(false);
+      setError(null);
+    }
+  }, [authUser]);
 
   const signIn = async () => {
     setBusy(true);

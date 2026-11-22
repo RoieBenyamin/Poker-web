@@ -82,6 +82,7 @@ async function initializeFirebaseService(config: FirebaseOptions): Promise<DataS
   const groupsCol = collection(db, 'groups');
   const usersCol = collection(db, 'users');
   const sessionGroupIds = new Map<string, string>();
+  let popupSignInInProgress = false;
 
   const requireUserId = () => {
     const user = auth.currentUser;
@@ -166,11 +167,15 @@ async function initializeFirebaseService(config: FirebaseOptions): Promise<DataS
           await signInWithRedirect(auth, provider);
           return;
         }
+        if (popupSignInInProgress) throw new Error('ההתחברות כבר מתבצעת. המתינו רגע ונסו שוב.');
+        popupSignInInProgress = true;
         try {
-          await signInWithPopup(auth, provider);
+          await signInWithPopupOrAuthState(auth, provider);
         } catch (error) {
           if (!isPopupUnavailable(error)) throw error;
           await signInWithRedirect(auth, provider);
+        } finally {
+          popupSignInInProgress = false;
         }
       } catch (error) {
         throw asError(error);
@@ -461,6 +466,27 @@ function isMobileBrowser(): boolean {
 function isPopupUnavailable(error: unknown): boolean {
   return error instanceof FirebaseError
     && ['auth/popup-blocked', 'auth/operation-not-supported-in-this-environment', 'auth/web-storage-unsupported'].includes(error.code);
+}
+
+async function signInWithPopupOrAuthState(auth: ReturnType<typeof getAuth>, provider: GoogleAuthProvider): Promise<void> {
+  let unsubscribe: (() => void) | undefined;
+  const authStateChanged = new Promise<void>((resolve, reject) => {
+    unsubscribe = onAuthStateChanged(
+      auth,
+      (user) => {
+        if (isGoogleUser(user)) resolve();
+      },
+      (error) => reject(asError(error)),
+    );
+  });
+  try {
+    await Promise.race([
+      signInWithPopup(auth, provider).then(() => undefined),
+      authStateChanged,
+    ]);
+  } finally {
+    unsubscribe?.();
+  }
 }
 
 function asError(error: unknown): Error {
