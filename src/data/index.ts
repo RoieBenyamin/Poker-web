@@ -1,5 +1,4 @@
 import type { DataService } from './DataService';
-import { createLocalService } from './localService';
 
 const env = import.meta.env;
 
@@ -14,11 +13,11 @@ export const firebaseConfig = {
 
 export const isFirebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
 
-/** Picks Firestore when configured, otherwise falls back to localStorage. */
+/** Firebase is required because every app user must authenticate with Google. */
 export async function createDataService(): Promise<DataService> {
-  if (isFirebaseConfigured) {
-    const { createFirebaseService } = await import('./firebaseService');
-    return createFirebaseService(firebaseConfig);
+  if (!isFirebaseConfigured) {
+    throw new Error('חיבור Firebase לא הוגדר. בדקו את משתני הסביבה לפני הפעלת האפליקציה.');
   }
-  return createLocalService();
+  const { createFirebaseService } = await import('./firebaseService');
+  return createFirebaseService(firebaseConfig);
 }

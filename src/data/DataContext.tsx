@@ -6,7 +6,6 @@ import { uid } from '../lib/format';
 import { roundMoney } from '../lib/money';
 import { settleSession, sessionTotals } from '../lib/settlement';
 
-const ME_KEY = 'poker.me';
 const GROUP_KEY = 'poker.group';
 
 export interface NewSessionInput {
@@ -31,7 +30,6 @@ interface DataContextValue extends AppData {
   mode: DataMode | null;
   me: Player | null;
   meId: string | null;
-  setMeId: (id: string | null) => void;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   getSession: (id: string) => Session | undefined;
@@ -58,8 +56,7 @@ function buildActions(service: DataService | null, meId: string | null, group: P
       throw new Error('הפעולה זמינה למנהלי הקבוצה בלבד');
     }
   };
-  const isAdmin = () => Boolean(group?.members.some((m) => m.role === 'admin'
-    && (service?.mode === 'firebase' ? m.userId === service.userId : m.playerId === meId)));
+  const isAdmin = () => Boolean(group?.members.some((m) => m.role === 'admin' && m.userId === service?.userId));
   const positive = (amount: number) => {
     const v = roundMoney(amount);
     if (!Number.isFinite(v) || v < 0) throw new Error('סכום לא תקין');
@@ -68,14 +65,15 @@ function buildActions(service: DataService | null, meId: string | null, group: P
 
   return {
     async createGroup(name: string, defaultBuyIn: number, emoji?: string) {
-      if (!meId) throw new Error('יש ליצור פרופיל לפני יצירת קבוצה');
+      const userId = service?.userId;
+      if (!meId || !userId) throw new Error('יש להתחבר באמצעות חשבון Google לפני יצירת קבוצה');
       const trimmed = name.trim();
       if (!trimmed) throw new Error('יש להזין שם לקבוצה');
       const amount = positive(defaultBuyIn);
       if (amount === 0) throw new Error('סכום הכניסה חייב להיות גדול מ-0');
       const member = {
         playerId: meId,
-        userId: service?.userId ?? meId,
+        userId,
         role: 'admin' as const,
         joinedAt: nowIso(),
       };
@@ -93,12 +91,13 @@ function buildActions(service: DataService | null, meId: string | null, group: P
       return newGroup.id;
     },
     async joinGroup(code: string) {
-      if (!meId) throw new Error('יש ליצור פרופיל לפני הצטרפות לקבוצה');
+      const userId = service?.userId;
+      if (!meId || !userId) throw new Error('יש להתחבר באמצעות חשבון Google לפני הצטרפות לקבוצה');
       const normalized = code.trim().toUpperCase();
       if (!/^[A-Z0-9]{6}$/.test(normalized)) throw new Error('קוד ההזמנה חייב להכיל 6 תווים');
       await svc().joinGroup(normalized, {
         playerId: meId,
-        userId: service?.userId ?? meId,
+        userId,
         role: 'member',
         joinedAt: nowIso(),
       });
@@ -129,15 +128,6 @@ function buildActions(service: DataService | null, meId: string | null, group: P
       if (!group) throw new Error('לא נבחרה קבוצה');
       const inviteCode = newInviteCode();
       await svc().updateGroup(group.id, (current) => ({ ...current, inviteCode }));
-    },
-    async createPlayer(name: string, phone?: string): Promise<Player> {
-      if (group) throw new Error('שחקנים מצטרפים לקבוצה באמצעות קוד הזמנה');
-      const trimmed = name.trim();
-      if (!trimmed) throw new Error('יש להזין שם');
-      const player: Player = { id: uid('p_'), name: trimmed, createdAt: nowIso() };
-      if (phone?.trim()) player.phone = phone.trim();
-      await svc().upsertPlayer(player);
-      return player;
     },
     async updatePlayer(player: Player) {
       if (player.id !== meId) throw new Error('אפשר לערוך רק את הפרופיל שלך');
@@ -297,7 +287,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
   const [authUser, setAuthUser] = useState<AuthUserInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [meId, setMeIdState] = useState<string | null>(() => localStorage.getItem(ME_KEY));
   const [groupId, setGroupIdState] = useState<string | null>(() => localStorage.getItem(GROUP_KEY));
 
   useEffect(() => {
@@ -308,35 +297,44 @@ export function DataProvider({ children }: { children: ReactNode }) {
       .then((svc) => {
         if (cancelled) return;
         setService(svc);
-        if (svc.subscribeAuth) {
+        try {
           unsubAuth = svc.subscribeAuth(
             (user) => {
               setAuthUser(user);
               setAuthReady(true);
               setError(null);
+              if (!user) {
+                setData({ groups: [], players: [], sessions: [] });
+                setReady(true);
+              }
             },
             (e) => {
               setError(e.message);
               setAuthReady(true);
+              setReady(true);
             },
           );
-        } else {
+          unsub = svc.subscribe(
+            (d) => {
+              setData(d);
+              setReady(true);
+            },
+            (e) => {
+              setError(e.message);
+              setReady(true);
+            },
+          );
+        } catch (e) {
+          setError(e instanceof Error ? e.message : 'שגיאה באתחול שירות הנתונים');
           setAuthReady(true);
+        } finally {
+          setReady(true);
         }
-        unsub = svc.subscribe(
-          (d) => {
-            setData(d);
-            setReady(true);
-          },
-          (e) => {
-            setError(e.message);
-            setReady(true);
-          },
-        );
       })
       .catch((e: unknown) => {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : 'שגיאה באתחול שירות הנתונים');
+        setAuthReady(true);
         setReady(true);
       });
     return () => {
@@ -345,29 +343,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
       unsubAuth?.();
     };
   }, []);
-  const firebasePlayerId = service?.mode === 'firebase'
-    ? data.players.find((p) => p.userId === service.userId)?.id
-      ?? data.groups.flatMap((g) => g.members).find((m) => m.userId === service.userId)?.playerId
+  const userId = service?.userId;
+  const currentMeId = userId
+    ? data.players.find((player) => player.userId === userId)?.id
+      ?? data.groups.flatMap((group) => group.members).find((member) => member.userId === userId)?.playerId
       ?? null
     : null;
-  const currentMeId = service?.mode === 'firebase' ? firebasePlayerId : meId;
-  const setMeId = useCallback((id: string | null) => {
-    if (service?.mode === 'firebase' && id && firebasePlayerId && id !== firebasePlayerId) return;
-    if (id) localStorage.setItem(ME_KEY, id);
-    else localStorage.removeItem(ME_KEY);
-    setMeIdState(id);
-  }, [service, firebasePlayerId]);
   const setGroupId = useCallback((id: string | null) => {
     if (id) localStorage.setItem(GROUP_KEY, id);
     else localStorage.removeItem(GROUP_KEY);
     setGroupIdState(id);
   }, []);
   const signInWithGoogle = useCallback(async () => {
-    if (!service?.signInWithGoogle) throw new Error('התחברות Google אינה זמינה במצב הנוכחי');
+    if (!service) throw new Error('שירות הנתונים עדיין לא מוכן');
     await service.signInWithGoogle();
   }, [service]);
   const signOut = useCallback(async () => {
-    if (!service?.signOut) throw new Error('יציאה אינה זמינה במצב הנוכחי');
+    if (!service) throw new Error('שירות הנתונים עדיין לא מוכן');
     await service.signOut();
   }, [service]);
   useEffect(() => {
@@ -388,8 +380,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const playerMap = new Map(scopedPlayers.map((p) => [p.id, p]));
     const sessionMap = new Map(scopedSessions.map((s) => [s.id, s]));
     const me = currentMeId ? data.players.find((p) => p.id === currentMeId) ?? null : null;
-    const isGroupAdmin = Boolean(activeGroup?.members.some((m) => m.role === 'admin'
-      && (service?.mode === 'firebase' ? m.userId === service.userId : m.playerId === currentMeId)));
+    const isGroupAdmin = Boolean(activeGroup?.members.some((m) => m.role === 'admin' && m.userId === service?.userId));
     return {
       groups: data.groups,
       players: scopedPlayers,
@@ -405,7 +396,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       mode: service?.mode ?? null,
       me,
       meId: currentMeId,
-      setMeId,
       signInWithGoogle,
       signOut,
       setGroupId,
@@ -413,7 +403,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       getPlayer: (id) => playerMap.get(id),
       actions: buildActions(service, currentMeId, activeGroup),
     };
-  }, [data, ready, authReady, authUser, error, service, currentMeId, setMeId, signInWithGoogle, signOut, groupId, setGroupId]);
+  }, [data, ready, authReady, authUser, error, service, currentMeId, signInWithGoogle, signOut, groupId, setGroupId]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

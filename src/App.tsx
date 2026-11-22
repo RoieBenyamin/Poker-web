@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { useData } from './data/DataContext';
 import { navigate, useRoute } from './lib/router';
 import { BottomNav, type TabKey } from './components/BottomNav';
-import { Onboarding } from './screens/Onboarding';
 import { CalendarScreen } from './screens/CalendarScreen';
 import { ActiveTableScreen } from './screens/ActiveTableScreen';
 import { SessionScreen } from './screens/SessionScreen';
@@ -31,6 +30,8 @@ export default function App() {
     if (!section) navigate(groups.length ? '/calendar' : '/groups');
   }, [section, groups.length]);
 
+  if (mode === 'firebase' && !authReady) return <Splash />;
+  if (mode === 'firebase' && !authUser) return <GoogleSignInScreen />;
   if (!ready) return <Splash />;
   if (error && !mode) {
     return (
@@ -43,14 +44,12 @@ export default function App() {
       </div>
     );
   }
-  if (mode === 'firebase' && !authReady) return <Splash />;
-  if (mode === 'firebase' && !authUser) return <GoogleSignInScreen />;
   if (mode === 'firebase' && authUser && !me) {
     return error
       ? <GoogleSignInScreen />
       : <Splash />;
   }
-  if (!meId || !me) return <Onboarding />;
+  if (!meId || !me) return <GoogleSignInScreen />;
 
   let screen;
   let tab: TabKey = 'calendar';

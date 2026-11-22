@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Cloud, Download, HardDrive, LogOut, Pencil, Smartphone, UserCog, Users, UsersRound } from 'lucide-react';
+import { Cloud, Download, LogOut, Pencil, Smartphone, Users, UsersRound } from 'lucide-react';
 import { useData } from '../data/DataContext';
 import { Header } from '../components/Header';
 import { PlayerForm } from '../components/PlayerForm';
@@ -9,9 +9,8 @@ import { navigate } from '../lib/router';
 import type { Player } from '../types';
 
 export function SettingsScreen() {
-  const { me, players, setMeId, actions, mode, sessions, authUser, signOut } = useData();
+  const { me, players, actions, sessions, authUser, signOut } = useData();
   const run = useRun();
-  const [switching, setSwitching] = useState(false);
   const [editing, setEditing] = useState<Player | null>(null);
   const sorted = [...players].sort((a, b) => a.name.localeCompare(b.name, 'he'));
 
@@ -42,18 +41,10 @@ export function SettingsScreen() {
             </IconButton>
           </Card>
         )}
-        {mode !== 'firebase' && (
-          <Button variant="secondary" block className="mt-3" onClick={() => setSwitching(true)}>
-            <UserCog size={20} />
-            החלף משתמש
-          </Button>
-        )}
-        {mode === 'firebase' && (
-          <Button variant="danger" block className="mt-3" onClick={() => run(signOut, 'התנתקת מחשבון Google')}>
-            <LogOut size={18} />
-            יציאה מחשבון Google
-          </Button>
-        )}
+        <Button variant="danger" block className="mt-3" onClick={() => run(signOut, 'התנתקת מחשבון Google')}>
+          <LogOut size={18} />
+          יציאה מחשבון Google
+        </Button>
         <Button variant="outline" block className="mt-2" onClick={() => navigate('/groups')}>
           <UsersRound size={19} />
           הקבוצות שלי וניהול ההזמנות
@@ -83,16 +74,12 @@ export function SettingsScreen() {
         <SectionTitle>נתונים וסנכרון</SectionTitle>
         <Card>
           <div className="flex items-center gap-3">
-            <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${mode === 'firebase' ? 'bg-sky-500/15 text-sky-300' : 'bg-amber-500/15 text-amber-300'}`}>
-              {mode === 'firebase' ? <Cloud size={22} /> : <HardDrive size={22} />}
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-500/15 text-sky-300">
+              <Cloud size={22} />
             </div>
             <div className="flex-1">
-              <div className="font-semibold">{mode === 'firebase' ? 'סנכרון בזמן אמת (Firebase)' : 'מצב מקומי (localStorage)'}</div>
-              <div className="text-xs text-slate-400">
-                {mode === 'firebase'
-                  ? 'כל החברים רואים עדכונים חיים מהטלפונים שלהם'
-                  : 'הנתונים נשמרים רק במכשיר הזה. הגדירו Firebase בקובץ ‎.env לסנכרון בין חברים.'}
-              </div>
+              <div className="font-semibold">סנכרון בזמן אמת (Firebase)</div>
+              <div className="text-xs text-slate-400">כל החברים רואים עדכונים חיים מהטלפונים שלהם</div>
             </div>
           </div>
           <div className="mt-4 grid grid-cols-1 gap-2">
@@ -117,37 +104,6 @@ export function SettingsScreen() {
         </Card>
         <p className="mt-6 text-center text-xs text-slate-600">פוקר בין חברים · v1.0 ♠️♥️♦️♣️</p>
       </div>
-
-      <Sheet open={switching} onClose={() => setSwitching(false)} title="מי משתמש במכשיר?">
-        <div className="space-y-2 pb-2">
-          {sorted.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => {
-                setMeId(p.id);
-                setSwitching(false);
-                navigate('/me');
-              }}
-              className={`flex h-14 w-full items-center gap-3 rounded-2xl border px-3 text-right ${p.id === me?.id ? 'border-red-500/50 bg-red-500/10' : 'border-slate-800 active:bg-slate-800'}`}
-            >
-              <Avatar name={p.name} id={p.id} photoURL={p.photoURL} size="sm" />
-              <span className="flex-1 font-medium">{p.name}</span>
-              {p.id === me?.id && <span className="text-xs text-red-300">נוכחי</span>}
-            </button>
-          ))}
-          <Button
-            variant="ghost"
-            block
-            onClick={() => {
-              setSwitching(false);
-              setMeId(null);
-            }}
-          >
-            שחקן חדש / יציאה
-          </Button>
-        </div>
-      </Sheet>
 
       {editing && (
         <Sheet open onClose={() => setEditing(null)} title={`עריכת ${editing.name}`}>

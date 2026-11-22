@@ -3,7 +3,7 @@
 
 # ♠️ Poker Between Friends (פוקר בין חברים)
 
-A modern, real-time Progressive Web App (PWA) for managing home poker games, tracking buy-ins/cash-outs live at the table, minimizing end-of-night peer-to-peer settlements, and analyzing long-term player statistics — built with zero-friction onboarding so friends can join straight from a WhatsApp invite link.
+A modern, real-time Progressive Web App (PWA) for managing home poker games, tracking buy-ins/cash-outs live at the table, minimizing end-of-night peer-to-peer settlements, and analyzing long-term player statistics — with required Google sign-in and group invitations.
 
 ---
 
@@ -24,7 +24,7 @@ A modern, real-time Progressive Web App (PWA) for managing home poker games, tra
 
 ## ✨ Key Features
 
-- **⚡ Zero-Friction Onboarding:** Powered by **Firebase Anonymous Authentication** and group invite links. Players join a group from their phone in seconds by selecting or entering their name — no email, password, or registration form required.
+- **🔐 Google Authentication:** Every player signs in with a real Google account. The app syncs the player's Google name, email, and profile photo to Firestore.
 - **🔄 Real-Time Table Synchronization:** Built on **Cloud Firestore** real-time listeners (`onSnapshot`). Every buy-in, rebuy, and cash-out updates instantaneously across all players' devices at the table.
 - **💸 Smart Debt Settlement:** Automatically computes the minimum number of peer-to-peer transfers (e.g., Bit / PayBox) needed to settle all balances at the end of a session, eliminating manual spreadsheet math.
 - **📊 Personal & Group Analytics:** Tracks complete session logs, net profit/loss history, total buy-ins, win rates, and cumulative performance trends over time for every player in the group.
@@ -40,15 +40,15 @@ A modern, real-time Progressive Web App (PWA) for managing home poker games, tra
 | **Frontend Framework** | React + TypeScript | Component-based UI with strict type safety |
 | **Build Tool** | Vite | Fast local development server and optimized production bundling |
 | **Database** | Firebase Cloud Firestore | Real-time NoSQL cloud persistence and cross-group queries |
-| **Authentication** | Firebase Anonymous Auth | Frictionless per-device session identity without passwords |
+| **Authentication** | Firebase Google Auth | Required Google account authentication |
 | **Deployment & Hosting** | Vercel | Continuous deployment from GitHub with HTTPS & global CDN |
 
 ---
 
 ## 🏗️ System Architecture & Data Model
 
-### 1. Authentication & Device Persistence
-When a user opens the application, Firebase silently generates a persistent anonymous `uid` cached in the browser storage. When joining a group via an invite code, the app links that `uid` to a player profile inside the group. If a player switches devices or clears browser data, they can simply reclaim their existing player profile inside the group without losing historical stats.
+### 1. Authentication & Profile
+Users must sign in with Google before accessing groups. The Google account `uid` identifies the user's Firestore profile and group memberships, while the app synchronizes the account's display name, email, and profile photo.
 
 ### 2. Firestore Collection Hierarchy
 ```text
@@ -150,9 +150,9 @@ Open `http://localhost:5173/` in your browser.
 
 Before running the app in production, ensure the following three settings are configured in your **Firebase Console**:
 
-1. **Enable Anonymous Authentication:**
-* Go to **Authentication → Sign-in method → Anonymous** and toggle **Enable** on.
-* Keep **Auto clean-up** unchecked so player sessions are not automatically purged after 30 days.
+1. **Enable Google Authentication:**
+* Go to **Authentication → Sign-in method → Google** and enable the provider.
+* Add your development and production domains under **Authentication → Settings → Authorized domains**.
 
 
 2. **Create the Collection Group Index:**
@@ -200,7 +200,7 @@ Players can install the web app directly onto their phone's home screen without 
 
 ### מה האפליקציה יודעת לעשות?
 
-* **כניסה ב-10 שניות בלי הרשמה ובלי סיסמאות:** שולחים קישור הזמנה בקבוצת הוואטסאפ -> כל חבר נכנס מהטלפון, בוחר את השם שלו ומיד מחובר (מבוסס על אימות אנונימי מאובטח של Firebase).
+* **התחברות מאובטחת עם Google:** כל שחקן מתחבר לחשבון Google שלו, והשם ותמונת הפרופיל מסונכרנים אוטומטית עם הקבוצה.
 * **סנכרון חי בזמן אמת בשולחן:** כל כניסה למשחק, רי-באי (Rebuy) או יציאה (Cash-out) מתעדכנים מיידית על המסכים של כל השחקנים דרך Cloud Firestore.
 * **קיזוז חובות חכם (מינימום העברות):** ברגע שסוגרים שולחן, האלגוריתם מחשב אוטומטית את המסלול הקצר ביותר לסגירת החובות ("יוסי מעביר 120 ₪ לדני") כדי לחסוך העברות כפולות ומיותרות.
 * **היסטוריה, מאזנים וסטטיסטיקות:** כל הנתונים נשמרים בענן לתמיד — כולל היסטוריית משחקים מלאה, רווח/הפסד מצטבר לכל שחקן, אחוזי הצלחה ומגמות לאורך זמן.

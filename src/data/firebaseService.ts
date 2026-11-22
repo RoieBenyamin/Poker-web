@@ -2,8 +2,6 @@ import { FirebaseError, getApp, getApps, initializeApp, type FirebaseOptions } f
 import {
   getAuth,
   GoogleAuthProvider,
-  linkWithPopup,
-  linkWithRedirect,
   onAuthStateChanged,
   signInWithPopup,
   signInWithRedirect,
@@ -84,7 +82,6 @@ async function initializeFirebaseService(config: FirebaseOptions): Promise<DataS
   const groupsCol = collection(db, 'groups');
   const usersCol = collection(db, 'users');
   const sessionGroupIds = new Map<string, string>();
-  const redirectResult = getRedirectResult(auth);
 
   const requireUserId = () => {
     const user = auth.currentUser;
@@ -98,12 +95,33 @@ async function initializeFirebaseService(config: FirebaseOptions): Promise<DataS
       return isGoogleUser(auth.currentUser) ? auth.currentUser.uid : null;
     },
     subscribeAuth(cb, onError) {
-      void redirectResult.catch((error: unknown) => onError?.(asError(error)));
-      return onAuthStateChanged(
+      let signingOutInvalidUser = false;
+      const unsubscribe = onAuthStateChanged(
         auth,
-        (user) => cb(isGoogleUser(user) ? authUserInfo(user) : null),
-        (error) => onError?.(error),
+        (user) => {
+          if (user && !user.isAnonymous && isGoogleUser(user)) {
+            cb(authUserInfo(user));
+            return;
+          }
+          cb(null);
+          if (signingOutInvalidUser) return;
+          signingOutInvalidUser = true;
+          void firebaseSignOut(auth)
+            .catch((error: unknown) => onError?.(asError(error)))
+            .finally(() => {
+              signingOutInvalidUser = false;
+            });
+        },
+        (error) => onError?.(asError(error)),
       );
+      void (async () => {
+        try {
+          await getRedirectResult(auth);
+        } catch (error) {
+          onError?.(asError(error));
+        }
+      })();
+      return unsubscribe;
     },
     subscribe(cb, onError) {
       let activeUserId: string | null = null;
@@ -117,18 +135,23 @@ async function initializeFirebaseService(config: FirebaseOptions): Promise<DataS
         const currentGeneration = ++generation;
         stopUserData();
         stopUserData = () => {};
+        cb({ groups: [], players: [], sessions: [] });
         if (!signedInUser) {
-          cb({ groups: [], players: [], sessions: [] });
           return;
         }
-        void ensureGoogleProfile(db, signedInUser)
-          .then(() => {
+        void (async () => {
+          try {
+            await withTimeout(ensureGoogleProfile(db, signedInUser), 10000);
             if (generation === currentGeneration) {
               stopUserData = subscribeUserData(db, signedInUser.uid, sessionGroupIds, cb, onError);
             }
-          })
-          .catch((error: unknown) => onError?.(asError(error)));
-      }, (error) => onError?.(error));
+          } catch (error) {
+            if (generation === currentGeneration) onError?.(asError(error));
+          } finally {
+            if (generation === currentGeneration) cb({ groups: [], players: [], sessions: [] });
+          }
+        })();
+      }, (error) => onError?.(asError(error)));
       return () => {
         generation += 1;
         authUnsub();
@@ -136,26 +159,29 @@ async function initializeFirebaseService(config: FirebaseOptions): Promise<DataS
       };
     },
     async signInWithGoogle() {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' });
-      const currentUser = auth.currentUser;
-      const useRedirect = isMobileBrowser();
-      if (useRedirect) {
-        if (currentUser?.isAnonymous) await linkWithRedirect(currentUser, provider);
-        else await signInWithRedirect(auth, provider);
-        return;
-      }
       try {
-        if (currentUser?.isAnonymous) await linkWithPopup(currentUser, provider);
-        else await signInWithPopup(auth, provider);
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+        if (isMobileBrowser()) {
+          await signInWithRedirect(auth, provider);
+          return;
+        }
+        try {
+          await signInWithPopup(auth, provider);
+        } catch (error) {
+          if (!isPopupUnavailable(error)) throw error;
+          await signInWithRedirect(auth, provider);
+        }
       } catch (error) {
-        if (!isPopupUnavailable(error)) throw error;
-        if (currentUser?.isAnonymous) await linkWithRedirect(currentUser, provider);
-        else await signInWithRedirect(auth, provider);
+        throw asError(error);
       }
     },
     async signOut() {
-      await firebaseSignOut(auth);
+      try {
+        await firebaseSignOut(auth);
+      } catch (error) {
+        throw asError(error);
+      }
     },
     async upsertPlayer(player: Player) {
       const userId = requireUserId();
@@ -274,12 +300,16 @@ async function ensureGoogleProfile(db: ReturnType<typeof getFirestore>, user: Us
   const profile: Player = {
     ...existing,
     id: existing?.id ?? `p_${user.uid}`,
-    name: user.displayName?.trim() || existing?.name || user.email?.split('@')[0] || 'שחקן',
+    name: user.displayName?.trim() || user.email?.split('@')[0] || existing?.name || 'שחקן',
     createdAt: existing?.createdAt ?? new Date().toISOString(),
     userId: user.uid,
   };
+  if (user.displayName) profile.displayName = user.displayName;
+  else delete profile.displayName;
   if (user.email) profile.email = user.email;
+  else delete profile.email;
   if (user.photoURL) profile.photoURL = user.photoURL;
+  else delete profile.photoURL;
   await setDoc(profileRef, profile);
 
   const memberships = await getDocs(query(collectionGroup(db, 'members'), where('userId', '==', user.uid)));
@@ -332,63 +362,75 @@ function subscribeUserData(
     });
     cb({ groups, players: [...players.values()], sessions });
   };
-  const fail = (error: Error) => onError?.(error);
+  const fail = (error: Error) => onError?.(asError(error));
+  let ownPlayerUnsub: () => void = () => {};
+  let membersUnsub: () => void = () => {};
 
-  const ownPlayerUnsub = onSnapshot(
-    doc(usersCol, userId),
-    (snap) => {
-      ownPlayer = snap.exists() ? (snap.data() as Player) : null;
-      emit();
-    },
-    fail,
-  );
-  const memberQuery = query(collectionGroup(db, 'members'), where('userId', '==', userId));
-  const membersUnsub = onSnapshot(
-    memberQuery,
-    (snap) => {
-      const ids = [...new Set(snap.docs.map((d) => d.ref.parent.parent?.id).filter((id): id is string => Boolean(id)))];
-      const nextKey = ids.sort().join(',');
-      if (nextKey !== activeGroupIds) {
-        activeGroupIds = nextKey;
-        groupUnsubs.forEach((unsub) => unsub());
-        groupUnsubs = [];
-        groupDocs.clear();
-        groupMembers.clear();
-        playersByGroup.clear();
-        sessionsByGroup.clear();
-        for (const id of ids) {
-          const groupRef = doc(groupsCol, id);
-          groupUnsubs.push(onSnapshot(groupRef, (groupSnap) => {
-            if (groupSnap.exists()) groupDocs.set(id, groupSnap.data() as Omit<PokerGroup, 'members'>);
-            else groupDocs.delete(id);
-            emit();
-          }, fail));
-          groupUnsubs.push(onSnapshot(collection(groupRef, 'members'), (memberSnap) => {
-            groupMembers.set(id, memberSnap.docs.map((memberDoc) => ({
-              ...(memberDoc.data() as PokerGroup['members'][number]),
-              userId: memberDoc.id,
-            })));
-            emit();
-          }, fail));
-          groupUnsubs.push(onSnapshot(collection(groupRef, 'players'), (playerSnap) => {
-            playersByGroup.set(id, playerSnap.docs.map((playerDoc) => playerDoc.data() as Player));
-            emit();
-          }, fail));
-          groupUnsubs.push(onSnapshot(collection(groupRef, 'sessions'), (sessionSnap) => {
-            const list = sessionSnap.docs.map((sessionDoc) => {
-              const session = decodeSession(sessionDoc.data(), sessionDoc.id);
-              sessionGroupIds.set(session.id, id);
-              return session;
-            });
-            sessionsByGroup.set(id, list);
-            emit();
-          }, fail));
+  try {
+    ownPlayerUnsub = onSnapshot(
+      doc(usersCol, userId),
+      (snap) => {
+        ownPlayer = snap.exists() ? (snap.data() as Player) : null;
+        if (!ownPlayer) fail(new Error('פרטי החשבון לא נמצאו. נסו להתחבר מחדש באמצעות Google.'));
+        emit();
+      },
+      fail,
+    );
+    const memberQuery = query(collectionGroup(db, 'members'), where('userId', '==', userId));
+    membersUnsub = onSnapshot(
+      memberQuery,
+      (snap) => {
+        const ids = [...new Set(snap.docs.map((d) => d.ref.parent.parent?.id).filter((id): id is string => Boolean(id)))];
+        const nextKey = ids.sort().join(',');
+        if (nextKey !== activeGroupIds) {
+          activeGroupIds = nextKey;
+          groupUnsubs.forEach((unsub) => unsub());
+          groupUnsubs = [];
+          groupDocs.clear();
+          groupMembers.clear();
+          playersByGroup.clear();
+          sessionsByGroup.clear();
+          for (const id of ids) {
+            const groupRef = doc(groupsCol, id);
+            groupUnsubs.push(onSnapshot(groupRef, (groupSnap) => {
+              if (groupSnap.exists()) groupDocs.set(id, groupSnap.data() as Omit<PokerGroup, 'members'>);
+              else groupDocs.delete(id);
+              emit();
+            }, fail));
+            groupUnsubs.push(onSnapshot(collection(groupRef, 'members'), (memberSnap) => {
+              groupMembers.set(id, memberSnap.docs.map((memberDoc) => ({
+                ...(memberDoc.data() as PokerGroup['members'][number]),
+                userId: memberDoc.id,
+              })));
+              emit();
+            }, fail));
+            groupUnsubs.push(onSnapshot(collection(groupRef, 'players'), (playerSnap) => {
+              playersByGroup.set(id, playerSnap.docs.map((playerDoc) => playerDoc.data() as Player));
+              emit();
+            }, fail));
+            groupUnsubs.push(onSnapshot(collection(groupRef, 'sessions'), (sessionSnap) => {
+              const list = sessionSnap.docs.map((sessionDoc) => {
+                const session = decodeSession(sessionDoc.data(), sessionDoc.id);
+                sessionGroupIds.set(session.id, id);
+                return session;
+              });
+              sessionsByGroup.set(id, list);
+              emit();
+            }, fail));
+          }
         }
-      }
-      emit();
-    },
-    fail,
-  );
+        emit();
+      },
+      fail,
+    );
+  } catch (error) {
+    ownPlayerUnsub();
+    membersUnsub();
+    groupUnsubs.forEach((unsub) => unsub());
+    onError?.(asError(error));
+  } finally {
+    emit();
+  }
 
   return () => {
     ownPlayerUnsub();
@@ -398,7 +440,8 @@ function subscribeUserData(
 }
 
 function isGoogleUser(user: User | null): user is User {
-  return Boolean(user?.providerData.some((provider) => provider.providerId === GoogleAuthProvider.PROVIDER_ID));
+  return Boolean(user && !user.isAnonymous
+    && user.providerData.some((provider) => provider.providerId === GoogleAuthProvider.PROVIDER_ID));
 }
 
 function authUserInfo(user: User): AuthUserInfo {
@@ -421,5 +464,35 @@ function isPopupUnavailable(error: unknown): boolean {
 }
 
 function asError(error: unknown): Error {
-  return error instanceof Error ? error : new Error('שגיאת אימות מול Google');
+  if (error instanceof FirebaseError) {
+    const messages: Record<string, string> = {
+      'auth/unauthorized-domain': 'הדומיין אינו מורשה להתחברות. בדקו את רשימת הדומיינים המורשים ב-Firebase.',
+      'auth/operation-not-allowed': 'התחברות Google אינה מופעלת בפרויקט Firebase.',
+      'auth/popup-blocked': 'חלון ההתחברות נחסם. אפשרו חלונות קופצים או נסו שוב.',
+      'auth/popup-closed-by-user': 'חלון ההתחברות נסגר לפני השלמת התהליך.',
+      'auth/network-request-failed': 'לא ניתן להתחבר לרשת. בדקו את החיבור ונסו שוב.',
+      'auth/too-many-requests': 'בוצעו יותר מדי ניסיונות התחברות. נסו שוב מאוחר יותר.',
+      'permission-denied': 'אין הרשאה לגשת לנתונים. בדקו את חברותכם בקבוצה.',
+      'unavailable': 'שירות הנתונים אינו זמין כרגע. בדקו את החיבור ונסו שוב.',
+    };
+    return new Error(messages[error.code] ?? 'אירעה שגיאה בחיבור לשירות. נסו שוב.');
+  }
+  if (error instanceof Error && /[\u0590-\u05FF]/.test(error.message)) return error;
+  return new Error('אירעה שגיאה בחיבור לשירות. נסו שוב.');
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => reject(new Error('טעינת נתוני החשבון נמשכת זמן רב מדי. בדקו את החיבור ונסו שוב.')), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      },
+    );
+  });
 }
