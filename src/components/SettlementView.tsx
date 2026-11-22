@@ -131,7 +131,7 @@ export function SettlementView({ session, back }: { session: Session; back?: () 
                 <tr key={l.playerId} className={cx('border-t border-slate-800/70', l.playerId === meId && 'bg-emerald-500/5')}>
                   <td className="px-3 py-3">
                     <div className="flex items-center gap-2">
-                      <Avatar name={name(l.playerId)} id={l.playerId} size="sm" />
+                      <Avatar name={name(l.playerId)} id={l.playerId} photoURL={getPlayer(l.playerId)?.photoURL} size="sm" />
                       <span className="font-medium">
                         {name(l.playerId)}
                         {i === 0 && l.final > 0 && ' 🏆'}

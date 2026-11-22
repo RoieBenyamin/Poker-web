@@ -3,6 +3,8 @@ export interface Player {
   name: string;
   /** Optional phone number for Bit / PayBox */
   phone?: string;
+  email?: string;
+  photoURL?: string;
   createdAt: string;
   groupIds?: string[];
   userId?: string;

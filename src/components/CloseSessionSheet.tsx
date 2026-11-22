@@ -63,7 +63,7 @@ export function CloseSessionSheet({
                 onClick={() => onFixPlayer(l.playerId)}
                 className="flex h-12 w-full items-center gap-3 rounded-xl bg-slate-900/70 px-3 text-right active:bg-slate-800"
               >
-                <Avatar name={name(l.playerId)} id={l.playerId} size="sm" />
+                <Avatar name={name(l.playerId)} id={l.playerId} photoURL={getPlayer(l.playerId)?.photoURL} size="sm" />
                 <span className="flex-1 font-medium">{name(l.playerId)}</span>
                 <span className="text-sm text-amber-300">הזן יציאה</span>
                 <ArrowLeft size={16} className="text-amber-300" />

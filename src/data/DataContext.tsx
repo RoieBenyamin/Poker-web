@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { AppData, Player, PokerGroup, Session } from '../types';
-import type { DataMode, DataService } from './DataService';
+import type { AuthUserInfo, DataMode, DataService } from './DataService';
 import { createDataService } from './index';
 import { uid } from '../lib/format';
 import { roundMoney } from '../lib/money';
@@ -25,11 +25,15 @@ interface DataContextValue extends AppData {
   isGroupAdmin: boolean;
   setGroupId: (id: string | null) => void;
   ready: boolean;
+  authReady: boolean;
+  authUser: AuthUserInfo | null;
   error: string | null;
   mode: DataMode | null;
   me: Player | null;
   meId: string | null;
   setMeId: (id: string | null) => void;
+  signInWithGoogle: () => Promise<void>;
+  signOut: () => Promise<void>;
   getSession: (id: string) => Session | undefined;
   getPlayer: (id: string) => Player | undefined;
   actions: ReturnType<typeof buildActions>;
@@ -290,17 +294,35 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [service, setService] = useState<DataService | null>(null);
   const [data, setData] = useState<AppData>({ groups: [], players: [], sessions: [] });
   const [ready, setReady] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const [authUser, setAuthUser] = useState<AuthUserInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [meId, setMeIdState] = useState<string | null>(() => localStorage.getItem(ME_KEY));
   const [groupId, setGroupIdState] = useState<string | null>(() => localStorage.getItem(GROUP_KEY));
 
   useEffect(() => {
     let unsub: (() => void) | undefined;
+    let unsubAuth: (() => void) | undefined;
     let cancelled = false;
     createDataService()
       .then((svc) => {
         if (cancelled) return;
         setService(svc);
+        if (svc.subscribeAuth) {
+          unsubAuth = svc.subscribeAuth(
+            (user) => {
+              setAuthUser(user);
+              setAuthReady(true);
+              setError(null);
+            },
+            (e) => {
+              setError(e.message);
+              setAuthReady(true);
+            },
+          );
+        } else {
+          setAuthReady(true);
+        }
         unsub = svc.subscribe(
           (d) => {
             setData(d);
@@ -320,6 +342,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
       unsub?.();
+      unsubAuth?.();
     };
   }, []);
   const firebasePlayerId = service?.mode === 'firebase'
@@ -339,6 +362,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     else localStorage.removeItem(GROUP_KEY);
     setGroupIdState(id);
   }, []);
+  const signInWithGoogle = useCallback(async () => {
+    if (!service?.signInWithGoogle) throw new Error('התחברות Google אינה זמינה במצב הנוכחי');
+    await service.signInWithGoogle();
+  }, [service]);
+  const signOut = useCallback(async () => {
+    if (!service?.signOut) throw new Error('יציאה אינה זמינה במצב הנוכחי');
+    await service.signOut();
+  }, [service]);
   useEffect(() => {
     if (!ready) return;
     if (!groupId && data.groups.length > 0) setGroupId(data.groups[0].id);
@@ -368,17 +399,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
       groupId: activeGroup?.id ?? null,
       isGroupAdmin,
       ready,
+      authReady,
+      authUser,
       error,
       mode: service?.mode ?? null,
       me,
       meId: currentMeId,
       setMeId,
+      signInWithGoogle,
+      signOut,
       setGroupId,
       getSession: (id) => sessionMap.get(id),
       getPlayer: (id) => playerMap.get(id),
       actions: buildActions(service, currentMeId, activeGroup),
     };
-  }, [data, ready, error, service, currentMeId, setMeId, groupId, setGroupId]);
+  }, [data, ready, authReady, authUser, error, service, currentMeId, setMeId, signInWithGoogle, signOut, groupId, setGroupId]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Cloud, Download, HardDrive, Pencil, Smartphone, UserCog, Users, UsersRound } from 'lucide-react';
+import { Cloud, Download, HardDrive, LogOut, Pencil, Smartphone, UserCog, Users, UsersRound } from 'lucide-react';
 import { useData } from '../data/DataContext';
 import { Header } from '../components/Header';
 import { PlayerForm } from '../components/PlayerForm';
@@ -9,7 +9,7 @@ import { navigate } from '../lib/router';
 import type { Player } from '../types';
 
 export function SettingsScreen() {
-  const { me, players, setMeId, actions, mode, sessions } = useData();
+  const { me, players, setMeId, actions, mode, sessions, authUser, signOut } = useData();
   const run = useRun();
   const [switching, setSwitching] = useState(false);
   const [editing, setEditing] = useState<Player | null>(null);
@@ -30,10 +30,11 @@ export function SettingsScreen() {
       <div className="px-4 pt-4">
         {me && (
           <Card className="flex items-center gap-3">
-            <Avatar name={me.name} id={me.id} size="lg" />
+            <Avatar name={me.name} id={me.id} photoURL={me.photoURL} size="lg" />
             <div className="flex-1">
               <div className="text-xs text-slate-400">מחובר כ-</div>
               <div className="text-xl font-bold">{me.name}</div>
+              {authUser?.email && <div className="text-sm text-slate-400">{authUser.email}</div>}
               {me.phone && <div className="num text-right text-sm text-slate-400">{me.phone}</div>}
             </div>
             <IconButton label="ערוך פרופיל" onClick={() => setEditing(me)}>
@@ -45,6 +46,12 @@ export function SettingsScreen() {
           <Button variant="secondary" block className="mt-3" onClick={() => setSwitching(true)}>
             <UserCog size={20} />
             החלף משתמש
+          </Button>
+        )}
+        {mode === 'firebase' && (
+          <Button variant="danger" block className="mt-3" onClick={() => run(signOut, 'התנתקת מחשבון Google')}>
+            <LogOut size={18} />
+            יציאה מחשבון Google
           </Button>
         )}
         <Button variant="outline" block className="mt-2" onClick={() => navigate('/groups')}>
@@ -65,7 +72,7 @@ export function SettingsScreen() {
               onClick={() => p.id === me?.id && setEditing(p)}
               className={`flex w-full items-center gap-3 rounded-2xl p-2.5 text-right ${p.id === me?.id ? 'active:bg-slate-800' : ''}`}
             >
-              <Avatar name={p.name} id={p.id} size="sm" />
+              <Avatar name={p.name} id={p.id} photoURL={p.photoURL} size="sm" />
               <span className="flex-1 font-medium">{p.name}</span>
               <span className="num text-sm text-slate-500">{p.phone ?? 'אין טלפון'}</span>
               {p.id === me?.id && <Pencil size={15} className="text-slate-600" />}
@@ -85,7 +92,6 @@ export function SettingsScreen() {
                 {mode === 'firebase'
                   ? 'כל החברים רואים עדכונים חיים מהטלפונים שלהם'
                   : 'הנתונים נשמרים רק במכשיר הזה. הגדירו Firebase בקובץ ‎.env לסנכרון בין חברים.'}
-                {mode === 'firebase' && <p className="mt-1 text-amber-300">החשבון האנונימי קשור למכשיר הזה; מעבר מכשיר דורש חשבון Firebase אחר.</p>}
               </div>
             </div>
           </div>
@@ -125,7 +131,7 @@ export function SettingsScreen() {
               }}
               className={`flex h-14 w-full items-center gap-3 rounded-2xl border px-3 text-right ${p.id === me?.id ? 'border-red-500/50 bg-red-500/10' : 'border-slate-800 active:bg-slate-800'}`}
             >
-              <Avatar name={p.name} id={p.id} size="sm" />
+              <Avatar name={p.name} id={p.id} photoURL={p.photoURL} size="sm" />
               <span className="flex-1 font-medium">{p.name}</span>
               {p.id === me?.id && <span className="text-xs text-red-300">נוכחי</span>}
             </button>

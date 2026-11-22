@@ -40,7 +40,7 @@ export function PlayerPicker({
                 on ? 'border-red-500/60 bg-red-500/10' : 'border-slate-800 bg-slate-950/40 active:bg-slate-800',
               )}
             >
-              <Avatar name={p.name} id={p.id} size="sm" />
+              <Avatar name={p.name} id={p.id} photoURL={p.photoURL} size="sm" />
               <span className="flex-1 truncate font-medium">
                 {p.name}
                 {p.id === meId && <span className="text-xs text-slate-500"> (אני)</span>}

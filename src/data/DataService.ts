@@ -2,13 +2,23 @@ import type { AppData, Player, PokerGroup, Session } from '../types';
 
 export type DataMode = 'firebase' | 'local';
 
+export interface AuthUserInfo {
+  uid: string;
+  displayName: string | null;
+  email: string | null;
+  photoURL: string | null;
+}
+
 /**
  * Storage-agnostic data service. Implemented by Firestore (real-time sync between
  * friends' phones) and by localStorage (dev / offline fallback).
  */
 export interface DataService {
   readonly mode: DataMode;
-  readonly userId?: string;
+  readonly userId?: string | null;
+  subscribeAuth?(cb: (user: AuthUserInfo | null) => void, onError?: (e: Error) => void): () => void;
+  signInWithGoogle?(): Promise<void>;
+  signOut?(): Promise<void>;
   /** Subscribes to the accessible groups and their data; emits on every change. */
   subscribe(cb: (data: AppData) => void, onError?: (e: Error) => void): () => void;
   upsertPlayer(player: Player): Promise<void>;

@@ -113,6 +113,7 @@ export function LiveSession({ session, back }: { session: Session; back?: () => 
                 key={l.playerId}
                 line={l}
                 name={nameOf(l.playerId)}
+                photoURL={getPlayer(l.playerId)?.photoURL}
                 isMe={l.playerId === meId}
                 canManage={isGroupAdmin || l.playerId === meId}
                 isAdmin={activeGroup?.members.some((m) => m.playerId === l.playerId && m.role === 'admin') ?? false}
@@ -143,6 +144,7 @@ export function LiveSession({ session, back }: { session: Session; back?: () => 
           session={session}
           playerId={detailId}
           name={nameOf(detailId)}
+          photoURL={getPlayer(detailId)?.photoURL}
           isAdmin={isGroupAdmin}
           canManage={isGroupAdmin || detailId === meId}
           onClose={() => setDetailId(null)}
@@ -207,6 +209,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 function PlayerRow({
   line,
   name,
+  photoURL,
   isMe,
   canManage,
   isAdmin,
@@ -218,6 +221,7 @@ function PlayerRow({
 }: {
   line: PlayerLine;
   name: string;
+  photoURL?: string;
   isMe: boolean;
   canManage: boolean;
   isAdmin: boolean;
@@ -231,7 +235,7 @@ function PlayerRow({
   return (
     <Card className={cx('!p-3', isMe && '!border-red-500/30', out && 'opacity-80')}>
       <button type="button" onClick={onOpen} className="flex w-full items-center gap-3 text-right">
-        <Avatar name={name} id={line.playerId} />
+        <Avatar name={name} id={line.playerId} photoURL={photoURL} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="truncate text-lg font-semibold">{name}</span>
@@ -380,6 +384,7 @@ function PlayerLogSheet({
   session,
   playerId,
   name,
+  photoURL,
   isAdmin,
   canManage,
   onClose,
@@ -388,6 +393,7 @@ function PlayerLogSheet({
   session: Session;
   playerId: string;
   name: string;
+  photoURL?: string;
   isAdmin: boolean;
   canManage: boolean;
   onClose: () => void;
@@ -432,7 +438,7 @@ function PlayerLogSheet({
         onClose={onClose}
         title={
           <span className="flex items-center gap-2">
-            <Avatar name={name} id={playerId} size="sm" />
+            <Avatar name={name} id={playerId} photoURL={photoURL} size="sm" />
             {name}
           </span>
         }

@@ -127,14 +127,16 @@ const AVATAR_COLORS = [
   'from-cyan-500 to-blue-600',
 ];
 
-export function Avatar({ name, id, size = 'md' }: { name: string; id: string; size?: 'sm' | 'md' | 'lg' }) {
+export function Avatar({ name, id, photoURL, size = 'md' }: { name: string; id: string; photoURL?: string; size?: 'sm' | 'md' | 'lg' }) {
   let h = 0;
   for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   const color = AVATAR_COLORS[h % AVATAR_COLORS.length];
   const dim = size === 'sm' ? 'h-8 w-8 text-sm' : size === 'lg' ? 'h-14 w-14 text-xl' : 'h-11 w-11 text-base';
   return (
-    <div className={cx('flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br font-bold text-white shadow-md', color, dim)}>
-      {name.trim().charAt(0) || '?'}
+    <div className={cx('flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br font-bold text-white shadow-md', color, dim)}>
+      {photoURL
+        ? <img src={photoURL} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
+        : name.trim().charAt(0) || '?'}
     </div>
   );
 }

@@ -138,7 +138,7 @@ export function DebtsScreen() {
                     >
                       {i + 1}
                     </span>
-                    <Avatar name={r.player.name} id={r.player.id} size="sm" />
+                    <Avatar name={r.player.name} id={r.player.id} photoURL={r.player.photoURL} size="sm" />
                     <div className="min-w-0 flex-1">
                       <div className="truncate font-semibold">
                         {r.player.name}

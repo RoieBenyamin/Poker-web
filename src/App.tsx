@@ -10,6 +10,7 @@ import { DashboardScreen } from './screens/DashboardScreen';
 import { DebtsScreen } from './screens/DebtsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { GroupsScreen } from './screens/GroupsScreen';
+import { GoogleSignInScreen } from './screens/GoogleSignInScreen';
 
 function Splash() {
   return (
@@ -21,7 +22,7 @@ function Splash() {
 }
 
 export default function App() {
-  const { ready, error, mode, me, meId, getSession, groups } = useData();
+  const { ready, authReady, authUser, error, mode, me, meId, getSession, groups } = useData();
   const route = useRoute();
   const [section, param] = route;
 
@@ -37,10 +38,17 @@ export default function App() {
         <div className="max-w-md rounded-3xl border border-red-500/30 bg-slate-900 p-5 text-center">
           <h1 className="text-xl font-bold text-red-300">לא ניתן להתחבר לשירות הנתונים</h1>
           <p className="mt-2 break-words text-sm text-slate-300">{error}</p>
-          <p className="mt-3 text-xs text-slate-500">בדוק את הגדרות Firebase ואפשר אימות אנונימי בפרויקט.</p>
+          <p className="mt-3 text-xs text-slate-500">בדקו את הגדרות Firebase ואת ספק Google בפרויקט.</p>
         </div>
       </div>
     );
+  }
+  if (mode === 'firebase' && !authReady) return <Splash />;
+  if (mode === 'firebase' && !authUser) return <GoogleSignInScreen />;
+  if (mode === 'firebase' && authUser && !me) {
+    return error
+      ? <GoogleSignInScreen />
+      : <Splash />;
   }
   if (!meId || !me) return <Onboarding />;
 

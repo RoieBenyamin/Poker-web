@@ -34,7 +34,7 @@ export function Onboarding() {
           <div className="space-y-2.5">
             {sorted.map((p) => (
               <Card key={p.id} onClick={() => setMeId(p.id)} className="flex items-center gap-3 !p-3">
-                <Avatar name={p.name} id={p.id} />
+                <Avatar name={p.name} id={p.id} photoURL={p.photoURL} />
                 <div className="flex-1">
                   <div className="text-lg font-semibold">{p.name}</div>
                   {p.phone && <div className="num text-right text-sm text-slate-500">{p.phone}</div>}

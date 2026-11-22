@@ -93,7 +93,7 @@ export function DashboardScreen({ playerId }: { playerId?: string }) {
               )}
             >
               <div className="flex items-center gap-3">
-                <Avatar name={player.name} id={player.id} size="lg" />
+                <Avatar name={player.name} id={player.id} photoURL={player.photoURL} size="lg" />
                 <div>
                   <div className="text-sm text-slate-300">ממוצע רווח/הפסד</div>
                   <div className="text-xs text-slate-400">{rangeLabel}</div>

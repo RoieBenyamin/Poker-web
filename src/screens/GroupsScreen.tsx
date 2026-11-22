@@ -126,7 +126,7 @@ export function GroupsScreen() {
               const isSelf = player.id === me?.id;
               return (
                 <div key={member.playerId} className="flex items-center gap-2 border-t border-slate-800/70 py-2.5">
-                  <Avatar name={player.name} id={player.id} size="sm" />
+                  <Avatar name={player.name} id={player.id} photoURL={player.photoURL} size="sm" />
                   <span className="flex-1 font-medium">{player.name}{isSelf ? ' (אני)' : ''}</span>
                   <span className={`inline-flex items-center gap-1 text-xs ${member.role === 'admin' ? 'text-amber-300' : 'text-slate-500'}`}>
                     {member.role === 'admin' && <Crown size={13} />} {member.role === 'admin' ? 'מנהל' : 'חבר'}
