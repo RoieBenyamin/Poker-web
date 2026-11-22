@@ -3,7 +3,7 @@
 
 # ♠️ Poker Between Friends (פוקר בין חברים)
 
-A modern, real-time Progressive Web App (PWA) for managing home poker games, tracking buy-ins/cash-outs live at the table, minimizing end-of-night peer-to-peer settlements, and analyzing long-term player statistics — with required Google sign-in and group invitations.
+A modern, real-time Progressive Web App (PWA) for managing home poker games, tracking buy-ins/cash-outs live at the table, minimizing end-of-night peer-to-peer settlements, and analyzing long-term player statistics — with required email-and-password authentication and group invitations.
 
 ---
 
@@ -24,7 +24,7 @@ A modern, real-time Progressive Web App (PWA) for managing home poker games, tra
 
 ## ✨ Key Features
 
-- **🔐 Google Authentication:** Every player signs in with a real Google account. The app syncs the player's Google name, email, and profile photo to Firestore.
+- **🔐 Email & Password Authentication:** Players register with their full name, email, and password. Account display names and email addresses are synced to Firestore.
 - **🔄 Real-Time Table Synchronization:** Built on **Cloud Firestore** real-time listeners (`onSnapshot`). Every buy-in, rebuy, and cash-out updates instantaneously across all players' devices at the table.
 - **💸 Smart Debt Settlement:** Automatically computes the minimum number of peer-to-peer transfers (e.g., Bit / PayBox) needed to settle all balances at the end of a session, eliminating manual spreadsheet math.
 - **📊 Personal & Group Analytics:** Tracks complete session logs, net profit/loss history, total buy-ins, win rates, and cumulative performance trends over time for every player in the group.
@@ -40,7 +40,7 @@ A modern, real-time Progressive Web App (PWA) for managing home poker games, tra
 | **Frontend Framework** | React + TypeScript | Component-based UI with strict type safety |
 | **Build Tool** | Vite | Fast local development server and optimized production bundling |
 | **Database** | Firebase Cloud Firestore | Real-time NoSQL cloud persistence and cross-group queries |
-| **Authentication** | Firebase Google Auth | Required Google account authentication |
+| **Authentication** | Firebase Email/Password Auth | Required account authentication with password reset |
 | **Deployment & Hosting** | Vercel | Continuous deployment from GitHub with HTTPS & global CDN |
 
 ---
@@ -48,7 +48,7 @@ A modern, real-time Progressive Web App (PWA) for managing home poker games, tra
 ## 🏗️ System Architecture & Data Model
 
 ### 1. Authentication & Profile
-Users must sign in with Google before accessing groups. The Google account `uid` identifies the user's Firestore profile and group memberships, while the app synchronizes the account's display name, email, and profile photo.
+Users must register or sign in with an email address and password before accessing groups. The Firebase Auth `uid` identifies the user's Firestore profile and group memberships, while the app synchronizes the account's display name and email.
 
 ### 2. Firestore Collection Hierarchy
 ```text
@@ -150,8 +150,8 @@ Open `http://localhost:5173/` in your browser.
 
 Before running the app in production, ensure the following three settings are configured in your **Firebase Console**:
 
-1. **Enable Google Authentication:**
-* Go to **Authentication → Sign-in method → Google** and enable the provider.
+1. **Enable Email/Password Authentication:**
+* Go to **Authentication → Sign-in method → Email/Password** and enable the provider.
 * Add your development and production domains under **Authentication → Settings → Authorized domains**.
 
 
@@ -200,7 +200,7 @@ Players can install the web app directly onto their phone's home screen without 
 
 ### מה האפליקציה יודעת לעשות?
 
-* **התחברות מאובטחת עם Google:** כל שחקן מתחבר לחשבון Google שלו, והשם ותמונת הפרופיל מסונכרנים אוטומטית עם הקבוצה.
+* **התחברות והרשמה מאובטחות:** כל שחקן נרשם עם שם מלא, אימייל וסיסמה, ופרטי החשבון מסונכרנים אוטומטית עם Firestore.
 * **סנכרון חי בזמן אמת בשולחן:** כל כניסה למשחק, רי-באי (Rebuy) או יציאה (Cash-out) מתעדכנים מיידית על המסכים של כל השחקנים דרך Cloud Firestore.
 * **קיזוז חובות חכם (מינימום העברות):** ברגע שסוגרים שולחן, האלגוריתם מחשב אוטומטית את המסלול הקצר ביותר לסגירת החובות ("יוסי מעביר 120 ₪ לדני") כדי לחסוך העברות כפולות ומיותרות.
 * **היסטוריה, מאזנים וסטטיסטיקות:** כל הנתונים נשמרים בענן לתמיד — כולל היסטוריית משחקים מלאה, רווח/הפסד מצטבר לכל שחקן, אחוזי הצלחה ומגמות לאורך זמן.

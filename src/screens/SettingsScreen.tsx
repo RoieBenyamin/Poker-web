@@ -41,9 +41,9 @@ export function SettingsScreen() {
             </IconButton>
           </Card>
         )}
-        <Button variant="danger" block className="mt-3" onClick={() => run(signOut, 'התנתקת מחשבון Google')}>
+        <Button variant="danger" block className="mt-3" onClick={() => run(signOut, 'התנתקת מהחשבון')}>
           <LogOut size={18} />
-          יציאה מחשבון Google
+          יציאה מהחשבון
         </Button>
         <Button variant="outline" block className="mt-2" onClick={() => navigate('/groups')}>
           <UsersRound size={19} />

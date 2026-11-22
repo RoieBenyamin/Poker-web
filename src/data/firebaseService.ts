@@ -1,12 +1,14 @@
 import { FirebaseError, getApp, getApps, initializeApp, type FirebaseOptions } from 'firebase/app';
 import {
+  browserLocalPersistence,
+  createUserWithEmailAndPassword,
   getAuth,
-  GoogleAuthProvider,
   onAuthStateChanged,
-  signInWithPopup,
-  signInWithRedirect,
+  sendPasswordResetEmail,
+  setPersistence,
+  signInWithEmailAndPassword,
   signOut as firebaseSignOut,
-  getRedirectResult,
+  updateProfile,
   type User,
 } from 'firebase/auth';
 import {
@@ -29,6 +31,7 @@ import type { AppData, BuyIn, Player, PokerGroup, Session, SessionPlayer, Transf
 import type { AuthUserInfo, DataService } from './DataService';
 
 let servicePromise: Promise<DataService> | undefined;
+const profileSyncs = new Map<string, Promise<void>>();
 
 function groupData(group: PokerGroup): Omit<PokerGroup, 'members'> {
   const { members: _members, ...data } = group;
@@ -78,29 +81,34 @@ export function createFirebaseService(config: FirebaseOptions): Promise<DataServ
 async function initializeFirebaseService(config: FirebaseOptions): Promise<DataService> {
   const app = getApps().length > 0 ? getApp() : initializeApp(config);
   const auth = getAuth(app);
+  const persistenceReady = setPersistence(auth, browserLocalPersistence).then(() => undefined, (error: unknown) => {
+    throw asError(error);
+  });
+  void persistenceReady.catch((error: unknown) => {
+    console.error('שגיאה בהגדרת שמירת ההתחברות של Firebase.', error);
+  });
   const db = getFirestore(app);
   const groupsCol = collection(db, 'groups');
   const usersCol = collection(db, 'users');
   const sessionGroupIds = new Map<string, string>();
-  let popupSignInInProgress = false;
 
   const requireUserId = () => {
     const user = auth.currentUser;
-    if (!isGoogleUser(user)) throw new Error('יש להתחבר באמצעות Google');
+    if (!isEmailPasswordUser(user)) throw new Error('יש להתחבר באמצעות אימייל וסיסמה');
     return user.uid;
   };
 
   return {
     mode: 'firebase',
     get userId() {
-      return isGoogleUser(auth.currentUser) ? auth.currentUser.uid : null;
+      return isEmailPasswordUser(auth.currentUser) ? auth.currentUser.uid : null;
     },
     subscribeAuth(cb, onError) {
       let signingOutInvalidUser = false;
       const unsubscribe = onAuthStateChanged(
         auth,
         (user) => {
-          if (user && !user.isAnonymous && isGoogleUser(user)) {
+          if (isEmailPasswordUser(user)) {
             cb(authUserInfo(user));
             return;
           }
@@ -115,13 +123,6 @@ async function initializeFirebaseService(config: FirebaseOptions): Promise<DataS
         },
         (error) => onError?.(asError(error)),
       );
-      void (async () => {
-        try {
-          await getRedirectResult(auth);
-        } catch (error) {
-          onError?.(asError(error));
-        }
-      })();
       return unsubscribe;
     },
     subscribe(cb, onError) {
@@ -129,7 +130,7 @@ async function initializeFirebaseService(config: FirebaseOptions): Promise<DataS
       let generation = 0;
       let stopUserData: () => void = () => {};
       const authUnsub = onAuthStateChanged(auth, (user) => {
-        const signedInUser = isGoogleUser(user) ? user : null;
+        const signedInUser = isEmailPasswordUser(user) ? user : null;
         const userId = signedInUser?.uid ?? null;
         if (userId === activeUserId) return;
         activeUserId = userId;
@@ -140,18 +141,15 @@ async function initializeFirebaseService(config: FirebaseOptions): Promise<DataS
         if (!signedInUser) {
           return;
         }
-        void (async () => {
-          try {
-            await withTimeout(ensureGoogleProfile(db, signedInUser), 10000);
-            if (generation === currentGeneration) {
-              stopUserData = subscribeUserData(db, signedInUser.uid, sessionGroupIds, cb, onError);
-            }
-          } catch (error) {
-            if (generation === currentGeneration) onError?.(asError(error));
-          } finally {
-            if (generation === currentGeneration) cb({ groups: [], players: [], sessions: [] });
-          }
-        })();
+        try {
+          stopUserData = subscribeUserData(db, signedInUser.uid, sessionGroupIds, cb, onError);
+        } catch (error) {
+          onError?.(asError(error));
+        }
+        void syncAuthProfile(db, signedInUser).catch((error: unknown) => {
+          console.error('שגיאה בסנכרון פרופיל המשתמש עם Firestore.', error);
+          if (generation === currentGeneration) onError?.(asError(error));
+        });
       }, (error) => onError?.(asError(error)));
       return () => {
         generation += 1;
@@ -159,24 +157,34 @@ async function initializeFirebaseService(config: FirebaseOptions): Promise<DataS
         stopUserData();
       };
     },
-    async signInWithGoogle() {
+    async signInWithEmail(email, password) {
       try {
-        const provider = new GoogleAuthProvider();
-        provider.setCustomParameters({ prompt: 'select_account' });
-        if (isMobileBrowser()) {
-          await signInWithRedirect(auth, provider);
-          return;
-        }
-        if (popupSignInInProgress) throw new Error('ההתחברות כבר מתבצעת. המתינו רגע ונסו שוב.');
-        popupSignInInProgress = true;
+        await persistenceReady;
+        const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+        return authUserInfo(credential.user);
+      } catch (error) {
+        throw asError(error);
+      }
+    },
+    async signUpWithEmail(displayName, email, password) {
+      try {
+        await persistenceReady;
+        const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        await updateProfile(credential.user, { displayName: displayName.trim() });
         try {
-          await signInWithPopupOrAuthState(auth, provider);
+          await syncAuthProfile(db, credential.user);
         } catch (error) {
-          if (!isPopupUnavailable(error)) throw error;
-          await signInWithRedirect(auth, provider);
-        } finally {
-          popupSignInInProgress = false;
+          console.error('שגיאה בשמירת פרופיל ההרשמה ב-Firestore.', error);
         }
+        return authUserInfo(credential.user);
+      } catch (error) {
+        throw asError(error);
+      }
+    },
+    async sendPasswordReset(email) {
+      try {
+        await persistenceReady;
+        await sendPasswordResetEmail(auth, email.trim());
       } catch (error) {
         throw asError(error);
       }
@@ -298,19 +306,29 @@ async function ownProfile(db: ReturnType<typeof getFirestore>, userId: string): 
   return snap.data();
 }
 
-async function ensureGoogleProfile(db: ReturnType<typeof getFirestore>, user: User): Promise<void> {
+function syncAuthProfile(db: ReturnType<typeof getFirestore>, user: User): Promise<void> {
+  const previous = profileSyncs.get(user.uid) ?? Promise.resolve();
+  const current = previous.catch(() => {}).then(() => writeAuthProfile(db, user));
+  profileSyncs.set(user.uid, current);
+  return current.finally(() => {
+    if (profileSyncs.get(user.uid) === current) profileSyncs.delete(user.uid);
+  });
+}
+
+async function writeAuthProfile(db: ReturnType<typeof getFirestore>, user: User): Promise<void> {
   const profileRef = doc(db, 'users', user.uid);
   const snapshot = await getDoc(profileRef);
   const existing = snapshot.exists() ? snapshot.data() as Player : undefined;
+  const displayName = user.displayName?.trim() || existing?.displayName || existing?.name || user.email?.split('@')[0] || 'שחקן';
   const profile: Player = {
     ...existing,
     id: existing?.id ?? `p_${user.uid}`,
-    name: user.displayName?.trim() || user.email?.split('@')[0] || existing?.name || 'שחקן',
+    name: displayName,
     createdAt: existing?.createdAt ?? new Date().toISOString(),
     userId: user.uid,
   };
   if (user.displayName) profile.displayName = user.displayName;
-  else delete profile.displayName;
+  else if (!profile.displayName) profile.displayName = displayName;
   if (user.email) profile.email = user.email;
   else delete profile.email;
   if (user.photoURL) profile.photoURL = user.photoURL;
@@ -376,7 +394,6 @@ function subscribeUserData(
       doc(usersCol, userId),
       (snap) => {
         ownPlayer = snap.exists() ? (snap.data() as Player) : null;
-        if (!ownPlayer) fail(new Error('פרטי החשבון לא נמצאו. נסו להתחבר מחדש באמצעות Google.'));
         emit();
       },
       fail,
@@ -444,9 +461,9 @@ function subscribeUserData(
   };
 }
 
-function isGoogleUser(user: User | null): user is User {
+function isEmailPasswordUser(user: User | null): user is User {
   return Boolean(user && !user.isAnonymous
-    && user.providerData.some((provider) => provider.providerId === GoogleAuthProvider.PROVIDER_ID));
+    && user.providerData.some((provider) => provider.providerId === 'password'));
 }
 
 function authUserInfo(user: User): AuthUserInfo {
@@ -458,67 +475,24 @@ function authUserInfo(user: User): AuthUserInfo {
   };
 }
 
-function isMobileBrowser(): boolean {
-  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-}
-
-function isPopupUnavailable(error: unknown): boolean {
-  return error instanceof FirebaseError
-    && ['auth/popup-blocked', 'auth/operation-not-supported-in-this-environment', 'auth/web-storage-unsupported'].includes(error.code);
-}
-
-async function signInWithPopupOrAuthState(auth: ReturnType<typeof getAuth>, provider: GoogleAuthProvider): Promise<void> {
-  let unsubscribe: (() => void) | undefined;
-  const authStateChanged = new Promise<void>((resolve, reject) => {
-    unsubscribe = onAuthStateChanged(
-      auth,
-      (user) => {
-        if (isGoogleUser(user)) resolve();
-      },
-      (error) => reject(asError(error)),
-    );
-  });
-  try {
-    await Promise.race([
-      signInWithPopup(auth, provider).then(() => undefined),
-      authStateChanged,
-    ]);
-  } finally {
-    unsubscribe?.();
-  }
-}
-
 function asError(error: unknown): Error {
   if (error instanceof FirebaseError) {
     const messages: Record<string, string> = {
-      'auth/unauthorized-domain': 'הדומיין אינו מורשה להתחברות. בדקו את רשימת הדומיינים המורשים ב-Firebase.',
-      'auth/operation-not-allowed': 'התחברות Google אינה מופעלת בפרויקט Firebase.',
-      'auth/popup-blocked': 'חלון ההתחברות נחסם. אפשרו חלונות קופצים או נסו שוב.',
-      'auth/popup-closed-by-user': 'חלון ההתחברות נסגר לפני השלמת התהליך.',
+      'auth/email-already-in-use': 'כתובת האימייל כבר רשומה. התחברו לחשבון במקום להירשם.',
+      'auth/invalid-credential': 'האימייל או הסיסמה אינם נכונים.',
+      'auth/weak-password': 'הסיסמה חלשה. יש לבחור סיסמה באורך של 6 תווים לפחות.',
+      'auth/invalid-email': 'כתובת האימייל אינה תקינה.',
+      'auth/missing-password': 'יש להזין סיסמה.',
+      'auth/user-disabled': 'החשבון הושבת. פנו לתמיכה.',
+      'auth/operation-not-allowed': 'התחברות באמצעות אימייל וסיסמה אינה מופעלת בפרויקט Firebase.',
       'auth/network-request-failed': 'לא ניתן להתחבר לרשת. בדקו את החיבור ונסו שוב.',
       'auth/too-many-requests': 'בוצעו יותר מדי ניסיונות התחברות. נסו שוב מאוחר יותר.',
-      'permission-denied': 'אין הרשאה לגשת לנתונים. בדקו את חברותכם בקבוצה.',
+      'auth/unauthorized-domain': 'הדומיין אינו מורשה להתחברות. בדקו את רשימת הדומיינים המורשים ב-Firebase.',
+      'permission-denied': 'אין הרשאה לגשת לנתונים. בדקו את הרשאות Firestore.',
       'unavailable': 'שירות הנתונים אינו זמין כרגע. בדקו את החיבור ונסו שוב.',
     };
-    return new Error(messages[error.code] ?? 'אירעה שגיאה בחיבור לשירות. נסו שוב.');
+    return new Error(`${messages[error.code] ?? 'אירעה שגיאה בחיבור לשירות. נסו שוב.'} · קוד שגיאה: ${error.code}`);
   }
   if (error instanceof Error && /[\u0590-\u05FF]/.test(error.message)) return error;
   return new Error('אירעה שגיאה בחיבור לשירות. נסו שוב.');
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(() => reject(new Error('טעינת נתוני החשבון נמשכת זמן רב מדי. בדקו את החיבור ונסו שוב.')), timeoutMs);
-    promise.then(
-      (value) => {
-        clearTimeout(timeoutId);
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimeout(timeoutId);
-        reject(error);
-      },
-    );
-  });
 }

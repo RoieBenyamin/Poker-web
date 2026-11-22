@@ -30,7 +30,9 @@ interface DataContextValue extends AppData {
   mode: DataMode | null;
   me: Player | null;
   meId: string | null;
-  signInWithGoogle: () => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (displayName: string, email: string, password: string) => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   getSession: (id: string) => Session | undefined;
   getPlayer: (id: string) => Player | undefined;
@@ -66,7 +68,7 @@ function buildActions(service: DataService | null, meId: string | null, group: P
   return {
     async createGroup(name: string, defaultBuyIn: number, emoji?: string) {
       const userId = service?.userId;
-      if (!meId || !userId) throw new Error('יש להתחבר באמצעות חשבון Google לפני יצירת קבוצה');
+      if (!meId || !userId) throw new Error('יש להתחבר לחשבון לפני יצירת קבוצה');
       const trimmed = name.trim();
       if (!trimmed) throw new Error('יש להזין שם לקבוצה');
       const amount = positive(defaultBuyIn);
@@ -92,7 +94,7 @@ function buildActions(service: DataService | null, meId: string | null, group: P
     },
     async joinGroup(code: string) {
       const userId = service?.userId;
-      if (!meId || !userId) throw new Error('יש להתחבר באמצעות חשבון Google לפני הצטרפות לקבוצה');
+      if (!meId || !userId) throw new Error('יש להתחבר לחשבון לפני הצטרפות לקבוצה');
       const normalized = code.trim().toUpperCase();
       if (!/^[A-Z0-9]{6}$/.test(normalized)) throw new Error('קוד ההזמנה חייב להכיל 6 תווים');
       await svc().joinGroup(normalized, {
@@ -343,20 +345,34 @@ export function DataProvider({ children }: { children: ReactNode }) {
       unsubAuth?.();
     };
   }, []);
-  const userId = service?.userId;
+  const userId = authUser?.uid ?? service?.userId;
   const currentMeId = userId
     ? data.players.find((player) => player.userId === userId)?.id
       ?? data.groups.flatMap((group) => group.members).find((member) => member.userId === userId)?.playerId
-      ?? null
+      ?? (authUser ? `p_${authUser.uid}` : null)
     : null;
   const setGroupId = useCallback((id: string | null) => {
     if (id) localStorage.setItem(GROUP_KEY, id);
     else localStorage.removeItem(GROUP_KEY);
     setGroupIdState(id);
   }, []);
-  const signInWithGoogle = useCallback(async () => {
+  const signInWithEmail = useCallback(async (email: string, password: string) => {
     if (!service) throw new Error('שירות הנתונים עדיין לא מוכן');
-    await service.signInWithGoogle();
+    const user = await service.signInWithEmail(email, password);
+    setAuthUser(user);
+    setAuthReady(true);
+    setError(null);
+  }, [service]);
+  const signUpWithEmail = useCallback(async (displayName: string, email: string, password: string) => {
+    if (!service) throw new Error('שירות הנתונים עדיין לא מוכן');
+    const user = await service.signUpWithEmail(displayName, email, password);
+    setAuthUser(user);
+    setAuthReady(true);
+    setError(null);
+  }, [service]);
+  const sendPasswordReset = useCallback(async (email: string) => {
+    if (!service) throw new Error('שירות הנתונים עדיין לא מוכן');
+    await service.sendPasswordReset(email);
   }, [service]);
   const signOut = useCallback(async () => {
     if (!service) throw new Error('שירות הנתונים עדיין לא מוכן');
@@ -371,15 +387,29 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [ready, data.groups, groupId, setGroupId]);
 
   const value = useMemo<DataContextValue>(() => {
+    const authPlayer: Player | null = authUser
+      ? {
+          id: currentMeId ?? `p_${authUser.uid}`,
+          userId: authUser.uid,
+          name: authUser.displayName?.trim() || authUser.email?.split('@')[0] || 'שחקן',
+          ...(authUser.displayName ? { displayName: authUser.displayName } : {}),
+          ...(authUser.email ? { email: authUser.email } : {}),
+          ...(authUser.photoURL ? { photoURL: authUser.photoURL } : {}),
+          createdAt: new Date().toISOString(),
+        }
+      : null;
+    const playersWithAuthFallback = authPlayer && !data.players.some((player) => player.id === authPlayer.id)
+      ? [...data.players, authPlayer]
+      : data.players;
     const activeGroup = data.groups.find((g) => g.id === groupId) ?? null;
     const memberIds = new Set(activeGroup?.members.map((m) => m.playerId) ?? []);
     const scopedPlayers = activeGroup
-      ? data.players.filter((p) => memberIds.has(p.id) || p.groupIds?.includes(activeGroup.id))
-      : data.players;
+      ? playersWithAuthFallback.filter((p) => memberIds.has(p.id) || p.groupIds?.includes(activeGroup.id) || p.userId === authUser?.uid)
+      : playersWithAuthFallback;
     const scopedSessions = activeGroup ? data.sessions.filter((s) => s.groupId === activeGroup.id) : [];
     const playerMap = new Map(scopedPlayers.map((p) => [p.id, p]));
     const sessionMap = new Map(scopedSessions.map((s) => [s.id, s]));
-    const me = currentMeId ? data.players.find((p) => p.id === currentMeId) ?? null : null;
+    const me = currentMeId ? playersWithAuthFallback.find((p) => p.id === currentMeId) ?? null : null;
     const isGroupAdmin = Boolean(activeGroup?.members.some((m) => m.role === 'admin' && m.userId === service?.userId));
     return {
       groups: data.groups,
@@ -396,14 +426,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
       mode: service?.mode ?? null,
       me,
       meId: currentMeId,
-      signInWithGoogle,
+      signInWithEmail,
+      signUpWithEmail,
+      sendPasswordReset,
       signOut,
       setGroupId,
       getSession: (id) => sessionMap.get(id),
       getPlayer: (id) => playerMap.get(id),
       actions: buildActions(service, currentMeId, activeGroup),
     };
-  }, [data, ready, authReady, authUser, error, service, currentMeId, signInWithGoogle, signOut, groupId, setGroupId]);
+  }, [data, ready, authReady, authUser, error, service, currentMeId, signInWithEmail, signUpWithEmail, sendPasswordReset, signOut, groupId, setGroupId]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

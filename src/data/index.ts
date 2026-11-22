@@ -13,7 +13,7 @@ export const firebaseConfig = {
 
 export const isFirebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
 
-/** Firebase is required because every app user must authenticate with Google. */
+/** Firebase is required because every app user must authenticate with email and password. */
 export async function createDataService(): Promise<DataService> {
   if (!isFirebaseConfigured) {
     throw new Error('חיבור Firebase לא הוגדר. בדקו את משתני הסביבה לפני הפעלת האפליקציה.');

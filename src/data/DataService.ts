@@ -17,7 +17,9 @@ export interface DataService {
   readonly mode: DataMode;
   readonly userId?: string | null;
   subscribeAuth(cb: (user: AuthUserInfo | null) => void, onError?: (e: Error) => void): () => void;
-  signInWithGoogle(): Promise<void>;
+  signInWithEmail(email: string, password: string): Promise<AuthUserInfo>;
+  signUpWithEmail(displayName: string, email: string, password: string): Promise<AuthUserInfo>;
+  sendPasswordReset(email: string): Promise<void>;
   signOut(): Promise<void>;
   /** Subscribes to the accessible groups and their data; emits on every change. */
   subscribe(cb: (data: AppData) => void, onError?: (e: Error) => void): () => void;
