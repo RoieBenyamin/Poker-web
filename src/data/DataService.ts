@@ -27,6 +27,7 @@ export interface DataService {
   createGroup(group: PokerGroup): Promise<void>;
   joinGroup(code: string, member: PokerGroup['members'][number]): Promise<void>;
   updateGroup(id: string, mutate: (group: PokerGroup) => PokerGroup): Promise<void>;
+  deleteGroup(id: string): Promise<void>;
   createSession(session: Session): Promise<void>;
   /** Atomic read-modify-write of a single session (transaction in Firestore). */
   updateSession(id: string, mutate: (s: Session) => Session): Promise<void>;

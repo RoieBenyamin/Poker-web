@@ -16,6 +16,14 @@ service cloud.firestore {
         && existsAfter(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
     }
 
+    function isGroupOwner(groupId) {
+      return signedIn()
+        && (
+          get(/databases/$(database)/documents/groups/$(groupId)).data.createdBy == request.auth.uid
+          || get(/databases/$(database)/documents/groups/$(groupId)).data.ownerId == request.auth.uid
+        );
+    }
+
     function isAdmin(groupId) {
       return isMember(groupId)
         && get(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)).data.role == 'admin';
@@ -26,11 +34,16 @@ service cloud.firestore {
     }
 
     match /groups/{groupId} {
-      allow get, list: if isMember(groupId);
+      allow get, list: if isMember(groupId) || isGroupOwner(groupId);
       allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid;
       allow update: if isAdmin(groupId)
         && request.resource.data.createdBy == resource.data.createdBy;
-      allow delete: if false;
+      allow delete: if signedIn()
+        && (resource.data.createdBy == request.auth.uid || resource.data.ownerId == request.auth.uid);
+
+      match /{collectionName}/{document=**} {
+        allow read, delete: if isGroupOwner(groupId);
+      }
 
       match /members/{memberId} {
         allow get, list: if isMember(groupId);
@@ -125,7 +138,8 @@ service cloud.firestore {
           getAfter(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.createdBy == request.auth.uid
           || isAdmin(request.resource.data.groupId)
         );
-      allow update, delete: if isAdmin(resource.data.groupId);
+      allow update: if isAdmin(resource.data.groupId);
+      allow delete: if isAdmin(resource.data.groupId) || isGroupOwner(resource.data.groupId);
     }
 
     match /users/{userId} {

@@ -1,20 +1,21 @@
 import { useState } from 'react';
-import { Check, Copy, Crown, Plus, RefreshCw, Shield, Users, X } from 'lucide-react';
+import { Check, Copy, Crown, Plus, RefreshCw, Shield, Trash2, Users, X } from 'lucide-react';
 import { useData } from '../data/DataContext';
 import { Header } from '../components/Header';
 import { useRun, useToast } from '../components/Toast';
-import { Avatar, Button, Card, EmptyState, Field, inputCls, MoneyInput, SectionTitle } from '../components/ui';
+import { Avatar, Button, Card, ConfirmSheet, EmptyState, Field, inputCls, MoneyInput, SectionTitle } from '../components/ui';
 import { copyText } from '../lib/whatsapp';
 import { formatMoney } from '../lib/money';
 
 export function GroupsScreen() {
-  const { groups, allSessions, activeGroup, me, getPlayer, setGroupId, actions, isGroupAdmin } = useData();
+  const { groups, allSessions, activeGroup, me, authUser, getPlayer, setGroupId, deleteGroup, actions, isGroupAdmin } = useData();
   const run = useRun();
   const toast = useToast();
   const [name, setName] = useState('');
   const [buyIn, setBuyIn] = useState('50');
   const [emoji, setEmoji] = useState('');
   const [code, setCode] = useState(new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('code') ?? '');
+  const [deleteGroupId, setDeleteGroupId] = useState<string | null>(null);
 
   const groupSessions = (id: string) => allSessions.filter((s) => s.groupId === id);
   const activeCount = (id: string) => groupSessions(id).filter((s) => s.phase === 'active').length;
@@ -64,26 +65,38 @@ export function GroupsScreen() {
           <div className="space-y-2.5">
             {groups.map((group) => {
               const isSelected = group.id === activeGroup?.id;
+              const isCreator = Boolean(authUser?.uid && (group.createdBy === authUser.uid || group.ownerId === authUser.uid));
               const liveCount = activeCount(group.id);
               return (
-                <Card
-                  key={group.id}
-                  onClick={() => setGroupId(group.id)}
-                  className={`flex items-center gap-3 !p-3.5 ${isSelected ? '!border-red-500/60 !bg-red-950/20' : ''}`}
-                >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-800 text-2xl">
-                    {group.emoji || '♠️'}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-bold">{group.name}</div>
-                    <div className="mt-1 flex items-center gap-2 text-xs text-slate-400">
-                      <span className="inline-flex items-center gap-1"><Users size={13} />{group.members.length} חברים</span>
-                      <span>·</span>
-                      <span>{liveCount ? `${liveCount} משחק פעיל` : 'אין משחק פעיל'}</span>
+                <div key={group.id} className="flex items-center gap-2">
+                  <Card
+                    onClick={() => setGroupId(group.id)}
+                    className={`flex min-w-0 flex-1 items-center gap-3 !p-3.5 ${isSelected ? '!border-red-500/60 !bg-red-950/20' : ''}`}
+                  >
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-800 text-2xl">
+                      {group.emoji || '♠️'}
                     </div>
-                  </div>
-                  {isSelected && <Check size={19} className="text-red-400" />}
-                </Card>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-bold">{group.name}</div>
+                      <div className="mt-1 flex items-center gap-2 text-xs text-slate-400">
+                        <span className="inline-flex items-center gap-1"><Users size={13} />{group.members.length} חברים</span>
+                        <span>·</span>
+                        <span>{liveCount ? `${liveCount} משחק פעיל` : 'אין משחק פעיל'}</span>
+                      </div>
+                    </div>
+                    {isSelected && <Check size={19} className="text-red-400" />}
+                  </Card>
+                  {isCreator && (
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      className="shrink-0 !px-2"
+                      onClick={() => setDeleteGroupId(group.id)}
+                    >
+                      <Trash2 size={16} /> מחק קבוצה
+                    </Button>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -192,6 +205,20 @@ export function GroupsScreen() {
           </div>
         </Card>
       </div>
+      <ConfirmSheet
+        open={deleteGroupId !== null}
+        title="מחיקת קבוצה לצמיתות"
+        text="האם אתה בטוח שברצונך למחוק את הקבוצה? כל המשחקים והנתונים שלה יימחקו לצמיתות."
+        confirmLabel="מחק לצמיתות"
+        danger
+        onClose={() => setDeleteGroupId(null)}
+        onConfirm={async () => {
+          if (!deleteGroupId) return;
+          const id = deleteGroupId;
+          setDeleteGroupId(null);
+          await run(() => deleteGroup(id), 'הקבוצה נמחקה לצמיתות');
+        }}
+      />
     </>
   );
 }

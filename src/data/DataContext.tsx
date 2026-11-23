@@ -1,10 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { AppData, Player, PokerGroup, Session } from '../types';
 import type { AuthUserInfo, DataMode, DataService } from './DataService';
 import { createDataService } from './index';
 import { uid } from '../lib/format';
 import { roundMoney } from '../lib/money';
 import { settleSession, sessionTotals } from '../lib/settlement';
+import { navigate } from '../lib/router';
 
 const GROUP_KEY = 'poker.group';
 
@@ -23,6 +24,7 @@ interface DataContextValue extends AppData {
   groupId: string | null;
   isGroupAdmin: boolean;
   setGroupId: (id: string | null) => void;
+  deleteGroup: (id: string) => Promise<void>;
   ready: boolean;
   authReady: boolean;
   authUser: AuthUserInfo | null;
@@ -290,6 +292,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [authUser, setAuthUser] = useState<AuthUserInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [groupId, setGroupIdState] = useState<string | null>(() => localStorage.getItem(GROUP_KEY));
+  const skipGroupAutoSelection = useRef(false);
 
   useEffect(() => {
     let unsub: (() => void) | undefined;
@@ -356,6 +359,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
     else localStorage.removeItem(GROUP_KEY);
     setGroupIdState(id);
   }, []);
+  const deleteGroup = useCallback(async (id: string) => {
+    if (!service) throw new Error('שירות הנתונים עדיין לא מוכן');
+    const userId = authUser?.uid ?? service.userId;
+    const group = data.groups.find((item) => item.id === id);
+    if (!userId || !group || (group.createdBy !== userId && group.ownerId !== userId)) {
+      throw new Error('רק יוצר הקבוצה יכול למחוק אותה');
+    }
+    await service.deleteGroup(id);
+    if (groupId === id) {
+      skipGroupAutoSelection.current = true;
+      setGroupId(null);
+      navigate('/groups');
+    }
+  }, [service, authUser, data.groups, groupId, setGroupId]);
   const signInWithEmail = useCallback(async (email: string, password: string) => {
     if (!service) throw new Error('שירות הנתונים עדיין לא מוכן');
     const user = await service.signInWithEmail(email, password);
@@ -380,7 +397,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [service]);
   useEffect(() => {
     if (!ready) return;
-    if (!groupId && data.groups.length > 0) setGroupId(data.groups[0].id);
+    if (!groupId && skipGroupAutoSelection.current) {
+      skipGroupAutoSelection.current = false;
+    } else if (!groupId && data.groups.length > 0) setGroupId(data.groups[0].id);
     else if (groupId && !data.groups.some((group) => group.id === groupId)) {
       setGroupId(data.groups[0]?.id ?? null);
     }
@@ -419,6 +438,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       activeGroup,
       groupId: activeGroup?.id ?? null,
       isGroupAdmin,
+      deleteGroup,
       ready,
       authReady,
       authUser,
@@ -435,7 +455,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       getPlayer: (id) => playerMap.get(id),
       actions: buildActions(service, currentMeId, activeGroup),
     };
-  }, [data, ready, authReady, authUser, error, service, currentMeId, signInWithEmail, signUpWithEmail, sendPasswordReset, signOut, groupId, setGroupId]);
+  }, [data, ready, authReady, authUser, error, service, currentMeId, signInWithEmail, signUpWithEmail, sendPasswordReset, signOut, groupId, setGroupId, deleteGroup]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

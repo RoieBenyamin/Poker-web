@@ -274,6 +274,39 @@ async function initializeFirebaseService(config: FirebaseOptions): Promise<DataS
       }
       await batch.commit();
     },
+    async deleteGroup(id) {
+      const userId = requireUserId();
+      const groupRef = doc(groupsCol, id);
+      const groupSnap = await getDoc(groupRef);
+      if (!groupSnap.exists()) throw new Error('הקבוצה לא נמצאה');
+      const group = groupSnap.data();
+      if (group.createdBy !== userId && group.ownerId !== userId) {
+        throw new Error('רק יוצר הקבוצה יכול למחוק אותה');
+      }
+
+      const collectionNames = ['sessions', 'games', 'players', 'members'];
+      const subcollections = await Promise.all(
+        collectionNames.map((name) => getDocs(collection(groupRef, name))),
+      );
+      const documents = subcollections.flatMap((snapshot) => snapshot.docs.map((entry) => entry.ref));
+      if (typeof group.inviteCode === 'string' && group.inviteCode) {
+        const inviteRef = doc(db, 'invites', group.inviteCode);
+        if ((await getDoc(inviteRef)).exists()) documents.push(inviteRef);
+      }
+
+      for (let offset = 0; offset < documents.length; offset += 450) {
+        const batch = writeBatch(db);
+        documents.slice(offset, offset + 450).forEach((ref) => batch.delete(ref));
+        await batch.commit();
+      }
+
+      const finalBatch = writeBatch(db);
+      finalBatch.delete(groupRef);
+      await finalBatch.commit();
+      sessionGroupIds.forEach((sessionGroupId, sessionId) => {
+        if (sessionGroupId === id) sessionGroupIds.delete(sessionId);
+      });
+    },
     async createSession(session) {
       requireUserId();
       await setDoc(doc(db, 'groups', session.groupId, 'sessions', session.id), encodeSession(session));

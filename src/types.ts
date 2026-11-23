@@ -27,6 +27,7 @@ export interface PokerGroup {
   inviteCode: string;
   createdAt: string;
   createdBy: string;
+  ownerId?: string;
   members: GroupMember[];
   emoji?: string;
 }
